@@ -5,6 +5,279 @@ time-aware hyperparameter tuning, detailed MLflow experiment tracking, model
 registry publication, and a raw-input model package that can be served locally
 or moved to Azure ML and GCP.
 
+## Project context
+
+Firmware deployment failures can make devices unavailable, force rollback, or
+degrade a site after rollout. Release teams therefore need a repeatable risk
+signal before approving a deployment, but that signal must not learn from
+post-deployment facts or silently change when source-system vocabularies drift.
+
+FirmAware is a clean-room implementation of that decision stage. It converts
+historical deployment outcomes into a binary operational decision:
+
+| Output | Meaning |
+|---|---|
+| `GO` | Predicted risk is below the persisted decision threshold. |
+| `NO_GO` | Predicted risk is at or above the threshold and should be reviewed. |
+| `LOW` | Probability is below half the threshold. |
+| `MEDIUM` | Probability is between half the threshold and the threshold. |
+| `HIGH` | Probability is at or above the threshold. |
+
+The decision line optimizes business cost rather than accuracy alone. A missed
+risky deployment is five times as expensive as a false alarm by default:
+
+```text
+expected_cost = false_negatives * cost_ratio_fn_fp + false_positives
+```
+
+The threshold, `GO`/`NO_GO` result, and bands all derive from this one persisted
+decision line. This keeps model evaluation, local batch prediction, and hosted
+MLflow inference consistent.
+
+### Intended users
+
+- **Release and fleet operations:** review deployment risk before rollout.
+- **ML engineers:** reproduce experiments, tune models, and publish versions.
+- **Platform engineers:** deploy the same MLflow model locally, on Azure ML, or
+  behind a GCP-hosted MLflow serving endpoint.
+- **Risk owners:** inspect cost, recall, false negatives, threshold diagnostics,
+  and model lineage before approving a version.
+
+### Goals and non-goals
+
+| Goals | Non-goals |
+|---|---|
+| Enforce the source data contract before modeling | Replace release approval with a fully autonomous action |
+| Prevent identifier, date, and post-outcome leakage | Stream processing or database ingestion |
+| Preserve chronology during tuning and evaluation | Real-time feature stores |
+| Make every run deterministic and traceable | Large distributed search clusters |
+| Package preprocessing and decisions with the model | Drift monitoring or automated retraining |
+| Support local development and cloud handoff | Provider-specific orchestration code |
+
+## ML pipeline system design
+
+### High-level architecture
+
+```mermaid
+flowchart LR
+    H[Deployment history CSV] --> V[Schema validation]
+    V --> F[Feature derivation]
+    F --> S[Outer chronological split]
+    S -->|Earlier data| CV[Expanding time-series CV]
+    CV --> T[Randomized hyperparameter search]
+    T --> B[Best candidate per family]
+    S -->|Latest holdout| E[Family comparison]
+    B --> E
+    E --> C[Champion + decision threshold]
+    C --> M[MLflow run and model registry]
+    C --> A[Atomic local artifacts]
+
+    U[Upcoming deployments CSV] --> SV[Scoring contract]
+    SV --> P[Registered raw-input PyFunc]
+    M --> P
+    A --> P
+    P --> O[Append-only scores CSV]
+```
+
+The system has one preprocessing implementation. Training, local prediction,
+and the registered MLflow PyFunc all invoke the same feature derivation and
+`Preprocessor.apply` path.
+
+### Component responsibilities
+
+| Component | Responsibility |
+|---|---|
+| `schema.py` | Defines all column facts and rejects missing columns, invalid outcomes, duplicate IDs, bad dates, and non-numeric values. |
+| `features.py` | Builds signed major-version jumps and operational interaction features, labels non-success outcomes as risky, and drops identifiers/leakage fields. |
+| `transform.py` | Fits train-only medians, one-hot categories, aligned feature order, and numeric scaling; reports unseen categorical values. |
+| `evaluation.py` | Selects the cost-sensitive threshold and produces classification, probability, curve, confusion, and feature-importance diagnostics. |
+| `train.py` | Creates time splits, searches candidates, logs nested runs, compares model families, atomically publishes local artifacts, and registers the champion. |
+| `model.py` | Packages raw 27-column validation, preprocessing, scoring, OOD reporting, and decisions into a portable MLflow PyFunc. |
+| `tracking.py` | Resolves local or remote MLflow tracking and artifact locations without cloud-provider coupling. |
+| `predict.py` | Loads local artifacts, invokes the shared scoring path, warns on OOD values, and appends immutable score history. |
+| `cli.py` | Exposes non-interactive `validate`, `train`, and `predict` commands with stable exit behavior. |
+
+### Training and publication sequence
+
+```mermaid
+sequenceDiagram
+    actor Operator
+    participant CLI
+    participant Contract
+    participant Trainer
+    participant MLflow
+    participant Registry
+    participant Artifacts
+
+    Operator->>CLI: train deployment_events.csv
+    CLI->>Contract: validate training schema and vocabulary
+    Contract-->>Trainer: typed, validated rows
+    Trainer->>Trainer: derive features and outer time split
+    Trainer->>Trainer: prepare expanding chronological folds
+    loop Every model candidate
+        Trainer->>Trainer: fit fold-specific preprocessing and model
+        Trainer->>MLflow: nested run, params, fold and pooled metrics
+    end
+    Trainer->>Trainer: select best candidate per family
+    Trainer->>Trainer: fit family winners on outer training data
+    Trainer->>Trainer: compare families on latest holdout
+    Trainer->>MLflow: report, curves, diagnostics, lineage
+    Trainer->>Registry: publish champion PyFunc and signature
+    Trainer->>Artifacts: atomically promote model and metadata
+    CLI-->>Operator: run URI and registered model version
+```
+
+### Data contract and leakage boundary
+
+Training consumes 30 columns. Scoring consumes the same contract without
+`deployment_outcome`, `time_to_failure_hours`, and `rollback_required`.
+
+- `deployment_date` controls chronology but never enters the feature matrix.
+- Deployment, device, site, and fingerprint identifiers are retained only for
+  validation and output correlation.
+- `time_to_failure_hours` and `rollback_required` are always removed because
+  they are known only after deployment.
+- The target is label-agnostic after validation: every allowed non-`SUCCESS`
+  outcome maps to risk `1`.
+- Firmware major-version parse failures are counted; more than 1% in training
+  is a hard failure.
+- Unknown scoring categories remain scoreable but produce all-zero one-hot
+  blocks and explicit OOD warnings.
+
+The fitted feature list proves the leakage boundary and is persisted as
+`artifacts\feature_list.json` and an MLflow artifact.
+
+### Temporal validation and tuning
+
+Random splitting would let later deployment behavior influence earlier
+predictions. FirmAware instead uses:
+
+1. An **outer chronological split** at the configured date or quantile.
+2. **Four expanding folds** inside the earlier side. A fold's training dates
+   are always earlier than its validation dates.
+3. A deterministic randomized search seeded from `config.yaml`.
+4. A single threshold selected from pooled out-of-time predictions for each
+   candidate.
+5. The lowest expected-cost candidate from each model family.
+6. A latest-period holdout comparison between the tuned family winners.
+
+The default search evaluates 12 logistic-regression candidates and 30 XGBoost
+candidates. The search budget is intentionally bounded so a 20,000-row run
+remains practical on a laptop while still exploring regularization, tree
+complexity, learning rate, row/feature sampling, and class weighting.
+
+### Artifacts and lineage
+
+```text
+MLflow parent run
+├── child runs: one per hyperparameter candidate
+├── child runs: final logistic and XGBoost holdout evaluations
+├── evaluation/
+│   ├── evaluation_report.html
+│   ├── tuning_trials.csv
+│   ├── final_model_comparison.csv
+│   ├── threshold, ROC, and precision-recall data
+│   ├── classification and confusion reports
+│   └── feature_importance.csv
+├── pipeline/
+│   ├── feature_list.json
+│   ├── medians.json
+│   └── metadata.json
+└── model: registered raw-input MLflow PyFunc
+```
+
+Local publication stages artifacts under a run-specific temporary directory.
+The directory is promoted only after MLflow logging and registry publication
+succeed, preventing a failed run from replacing the last usable local model.
+
+### Scoring path
+
+```mermaid
+flowchart LR
+    I[27-column request] --> C[Contract validation]
+    C --> D[Feature derivation]
+    D --> IM[Median imputation]
+    IM --> EN[One-hot encoding + OOD report]
+    EN --> AL[Align fitted feature list]
+    AL --> SC[Scale numeric features]
+    SC --> PR[Champion probability]
+    PR --> TH[Persisted threshold]
+    TH --> R[GO / NO_GO + risk band]
+```
+
+The fixed transformation order is **impute → encode → align → scale**. Alignment
+occurs before scaling so a missing raw feature is filled in raw space rather
+than injecting zero into standardized space.
+
+### Deployment topology
+
+```mermaid
+flowchart TB
+    subgraph Training
+        DS[Object storage / mounted CSV] --> JOB[Containerized training job]
+        JOB --> TS[MLflow tracking server]
+        JOB --> AS[Cloud artifact storage]
+        TS --> DB[(Managed PostgreSQL)]
+        TS --> AS
+    end
+
+    subgraph Promotion
+        TS --> MR[MLflow model registry]
+        MR --> AP[Review / approval gate]
+    end
+
+    subgraph Inference
+        AP --> BATCH[Scheduled batch job]
+        AP --> API[Managed online endpoint]
+        BATCH --> OUT[Scores / operational workflow]
+        API --> OUT
+    end
+```
+
+| Concern | Local | Azure | GCP |
+|---|---|---|---|
+| Training compute | Python process | Azure ML command job | Vertex AI custom job, Cloud Run job, or GKE |
+| Tracking | MLflow + SQLite | Azure ML MLflow endpoint | MLflow on Cloud Run/GKE |
+| Metadata store | `mlflow.db` | Azure ML managed tracking | Cloud SQL for PostgreSQL |
+| Artifact store | `mlruns\` | Azure-managed workspace storage | Cloud Storage |
+| Registry | Local MLflow registry | Azure ML registry/workspace | MLflow registry backed by Cloud SQL |
+| Serving | MLflow local server/container | Managed online or batch endpoint | Cloud Run, Vertex AI custom container, or GKE |
+| Identity | Local OS user | Managed identity | Workload identity |
+
+The provider boundary is MLflow plus environment variables. Training logic does
+not import Azure or GCP SDKs, so the same container and command can move between
+platforms.
+
+### Reliability, security, and operational controls
+
+- **Determinism:** every candidate and stochastic model uses the configured
+  seed; XGBoost uses one worker to avoid nondeterministic parallel reductions.
+- **Fail closed:** contract, split, artifact-version, and incompatible-output
+  errors stop the command rather than producing success-shaped defaults.
+- **Reproducibility:** code, dependencies, model signature, parameters,
+  thresholds, metrics, date ranges, and model URI are logged together.
+- **Privacy:** row-level evaluation artifacts are opt-in, model examples are
+  synthetic, and tracking URI credentials/query parameters are not persisted.
+- **Portability:** the model, preprocessor, and metadata are embedded in the
+  PyFunc rather than referring to Windows-only artifact paths.
+- **Backward safety:** scoring rejects mismatched spec versions and never
+  overwrites score history.
+- **OOD visibility:** unseen categories are flagged per row instead of silently
+  aliasing a known category.
+
+### Current limits and production evolution
+
+This repository intentionally remains a small pipeline rather than a complete
+MLOps platform. A production program should add:
+
+- An orchestrator for schedules, retries, data arrival, and approval workflows.
+- Data quality history and drift/performance monitoring after outcomes mature.
+- A concurrency-safe output sink instead of append-only CSV for parallel jobs.
+- Managed secrets, endpoint authentication, network isolation, and audit policy.
+- Registry aliases or stages such as `candidate` and `champion` with explicit
+  promotion criteria.
+- Load, latency, resilience, and rollback tests for the selected serving target.
+
 ## Setup
 
 Python 3.11 or newer is required. From the project root:
@@ -88,14 +361,16 @@ encoding, scaling, OOD reporting, probability scoring, and decision generation
 are included in one PyFunc package.
 
 ```powershell
-mlflow models serve -m "models:/FirmAwareRiskModel/1" -p 5001 --env-manager local
+$version = "<registered-version>"
+mlflow models serve -m "models:/FirmAwareRiskModel/$version" -p 5001 --env-manager local
 ```
 
 Build a portable Linux container when the target platform expects a custom
 image:
 
 ```powershell
-mlflow models build-docker -m "models:/FirmAwareRiskModel/1" -n firmaware-model
+$version = "<registered-version>"
+mlflow models build-docker -m "models:/FirmAwareRiskModel/$version" -n firmaware-model
 ```
 
 ## Azure ML and GCP
