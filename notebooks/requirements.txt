@@ -1,0 +1,5 @@
+ipykernel>=6.29,<7
+jupyterlab>=4.3,<5
+matplotlib>=3.9,<4
+nbclient>=0.10,<1
+seaborn>=0.13,<1
