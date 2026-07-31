@@ -217,6 +217,47 @@ def materialize_artifacts(
         yield target
 
 
+def list_scores_uris(
+    scores_uri: str | Path, client: Any | None = None
+) -> list[str]:
+    """List score objects oldest first so callers can offer run selection.
+
+    Object names embed the scoring timestamp, so name order is run order in both
+    stores; sorting on names keeps local and GCS listings identical.
+    """
+    if not is_gcs_uri(scores_uri):
+        path = Path(scores_uri)
+        if path.is_file():
+            return [str(path)]
+        if not path.is_dir():
+            return []
+        return [
+            str(item)
+            for item in sorted(
+                (item for item in path.glob("*.csv") if item.is_file()),
+                key=lambda item: item.name,
+            )
+        ]
+
+    bucket_name, prefix = _parse_gcs_uri(scores_uri)
+    storage_client = client or _storage_client()
+    bucket = storage_client.bucket(bucket_name)
+    names = sorted(
+        blob.name
+        for blob in bucket.list_blobs(prefix=f"{prefix}/" if prefix else "")
+        if blob.name.endswith(".csv")
+    )
+    return [f"gs://{bucket_name}/{name}" for name in names]
+
+
+def latest_scores_uri(
+    scores_uri: str | Path, client: Any | None = None
+) -> str | None:
+    """Return the newest score object so readers never depend on run ordering."""
+    candidates = list_scores_uris(scores_uri, client=client)
+    return candidates[-1] if candidates else None
+
+
 def write_scores(
     scores: pd.DataFrame,
     output_uri: str | Path,

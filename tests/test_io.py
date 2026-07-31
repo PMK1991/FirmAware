@@ -15,6 +15,8 @@ from firmaware.features import LABEL_COLUMN, derive_features, model_inputs
 from firmaware.cli import main
 from firmaware.io import (
     join_uri,
+    latest_scores_uri,
+    list_scores_uris,
     materialize_artifacts,
     publish_artifact_run,
     read_csv,
@@ -288,6 +290,68 @@ class IoTests(unittest.TestCase):
         objects = client.bucket("score-bucket").objects
         self.assertEqual(len(objects), 1)
         self.assertTrue(next(iter(objects)).startswith("scores/scores_"))
+
+    def test_gcs_score_runs_are_listed_oldest_first(self) -> None:
+        client = FakeStorageClient()
+        scores = pd.DataFrame(
+            {"deployment_id": ["d-1"], "risk_probability": [0.5]}
+        )
+        columns = scores.columns.tolist()
+        written = [
+            write_scores(
+                scores,
+                "gs://score-bucket/scores",
+                scored_at,
+                "run-1",
+                columns,
+                client=client,
+            )
+            for scored_at in (
+                "2026-07-22T00:00:00.000001Z",
+                "2026-07-23T00:00:00.000001Z",
+                "2026-07-24T00:00:00.000001Z",
+            )
+        ]
+        client.bucket("score-bucket").blob("scores/notes.txt").upload_from_string(
+            "ignored"
+        )
+
+        listed = list_scores_uris("gs://score-bucket/scores", client=client)
+
+        self.assertEqual(listed, written)
+        self.assertEqual(
+            latest_scores_uri("gs://score-bucket/scores", client=client),
+            written[-1],
+        )
+
+    def test_missing_scores_location_yields_no_runs(self) -> None:
+        client = FakeStorageClient()
+        self.assertEqual(
+            list_scores_uris("gs://score-bucket/scores", client=client), []
+        )
+        self.assertIsNone(
+            latest_scores_uri("gs://score-bucket/scores", client=client)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            absent = Path(directory) / "scores.csv"
+            self.assertEqual(list_scores_uris(absent), [])
+            self.assertIsNone(latest_scores_uri(absent))
+            absent.write_text("deployment_id\nd-1\n", encoding="utf-8")
+            self.assertEqual(latest_scores_uri(absent), str(absent))
+
+    def test_local_run_order_follows_names_not_write_order(self) -> None:
+        """Names embed the scoring timestamp, so copy order must not reorder runs."""
+        with tempfile.TemporaryDirectory() as directory:
+            scores_dir = Path(directory)
+            newest = scores_dir / "scores_20260731T000000000001Z_run-b.csv"
+            oldest = scores_dir / "scores_20260730T000000000001Z_run-a.csv"
+            newest.write_text("deployment_id\nd-2\n", encoding="utf-8")
+            oldest.write_text("deployment_id\nd-1\n", encoding="utf-8")
+
+            self.assertEqual(
+                list_scores_uris(scores_dir), [str(oldest), str(newest)]
+            )
+            self.assertEqual(latest_scores_uri(scores_dir), str(newest))
 
 
 if __name__ == "__main__":

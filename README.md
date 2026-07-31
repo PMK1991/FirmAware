@@ -412,6 +412,42 @@ appends rows to `outputs\scores.csv`. Unknown categorical values are encoded as
 all-zero one-hot blocks and printed as prominent warnings while still being
 scored. Existing score history is never overwritten.
 
+## Predictions page
+
+`app.py` is a read-only Streamlit page over scores the pipeline has already
+written. It never trains, scores, or writes anything, so it is safe to point at
+a live environment.
+
+```powershell
+python -m pip install -e ".[app]"
+python -m firmaware predict
+streamlit run app.py
+```
+
+It reads the same environment contract as the pipeline, so the identical command
+serves cloud output:
+
+```powershell
+$env:FIRMAWARE_SCORES_URI = "gs://firmaware-dev-scores/scores"
+$env:FIRMAWARE_ARTIFACTS_URI = "gs://firmaware-dev-artifacts"
+$env:FIRMAWARE_DATA_URI = "gs://firmaware-dev-data"
+streamlit run app.py
+```
+
+Two views share one scored dataset. **Fleet Overview** ranks the register with
+filters, a fleet-average gauge, and band, decision, and tier distributions.
+**Deployment Inspector** shows one deployment's GO/NO_GO stamp, probability
+gauge, equipment attributes, and risk flags.
+
+The page imports `firmaware.schema`, `firmaware.features`, and `firmaware.io`
+rather than restating them, and it reads the decision threshold from the
+champion's `metadata.json`. Gauge zones are therefore derived from the live
+threshold instead of fixed cut points, so the display cannot drift from
+`model.score_dataframe`. When several scoring runs exist, the newest is shown and
+a sidebar selector exposes the earlier immutable objects. Flags the model
+consumes are labeled separately from operator context that only annotates a
+deployment.
+
 ## Decisions where the specification was silent
 
 | Decision | Implementation |
@@ -435,10 +471,10 @@ holdout comparison.
 python -m pytest -q
 ```
 
-Verified output on 2026-07-23:
+Verified output on 2026-08-01:
 
 ```text
-23 passed in 14.80s
+32 passed in 49.06s
 ```
 
 The suite covers the data contract, label behavior, signed version features,
@@ -447,4 +483,6 @@ deterministic metrics, leakage exclusion, append-only output, MLflow nested
 tracking, registry publication, detailed evaluation artifacts, hosted/local
 prediction parity, hosted inference with nullable numeric values, lazy GCS I/O,
 immutable model runs, champion digest verification, environment-driven CLI
-defaults, and one-object-per-run cloud scoring.
+defaults, one-object-per-run cloud scoring, run listing order across both
+stores, and the predictions page in both views, including its threshold-derived
+gauge zones, run selection, missing-scores handling, and read-only behavior.
