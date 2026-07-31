@@ -1,0 +1,9 @@
+project_id         = "replace-with-firmaware-prod-project"
+region             = "us-central1"
+env                = "prod"
+image_digest       = "us-central1-docker.pkg.dev/replace-with-firmaware-prod-project/firmaware/firmaware@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+alerts_email       = "replace-with-operations@example.com"
+state_bucket_name  = "replace-with-firmaware-prod-project-firmaware-tf-state"
+scheduler_enabled  = true
+schedule           = "0 2 * * *"
+schedule_time_zone = "Etc/UTC"

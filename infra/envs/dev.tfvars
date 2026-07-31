@@ -1,0 +1,9 @@
+project_id         = "firmaware"
+region             = "us-central1"
+env                = "dev"
+image_digest       = "us-central1-docker.pkg.dev/firmaware/firmaware/firmaware@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+alerts_email       = "data4v@gmail.com"
+state_bucket_name  = "firmaware-558685262335-tf-state"
+scheduler_enabled  = true
+schedule           = "0 2 * * *"
+schedule_time_zone = "Etc/UTC"

@@ -1,0 +1,193 @@
+name: Deploy dev
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: firmaware-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
+    runs-on: ubuntu-latest
+    environment: development
+    env:
+      GCP_PROJECT_ID: ${{ vars.DEV_GCP_PROJECT_ID }}
+      DEV_GCP_PROJECT_ID: ${{ vars.DEV_GCP_PROJECT_ID }}
+      DEV_TF_STATE_BUCKET: ${{ vars.DEV_TF_STATE_BUCKET }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Reject stale or non-main deployment SHA
+        shell: bash
+        run: |
+          git fetch origin main
+          current_main="$(git rev-parse origin/main)"
+          if [[ "${DEPLOY_SHA}" != "${current_main}" ]]; then
+            echo "Refusing stale deployment SHA ${DEPLOY_SHA}; current main is ${current_main}" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Confirm tests for deployment SHA
+        run: |
+          python -m pip install -e ".[dev]"
+          ruff check src tests
+          python -m pytest -q
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.55.1
+      - name: Confirm infrastructure checks for deployment SHA
+        run: |
+          terraform -chdir=infra fmt -check -recursive
+          terraform -chdir=infra init -backend=false
+          terraform -chdir=infra validate
+          tflint --chdir=infra --init
+          tflint --chdir=infra --recursive
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.DEV_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.DEV_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          version: ">= 500.0.0"
+
+      - id: previous-image
+        name: Record previous dev image
+        shell: bash
+        run: |
+          image="$(gcloud run jobs describe firmaware-dev-predict \
+            --project "${DEV_GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format='value(spec.template.spec.template.spec.containers[0].image)' \
+            2>/dev/null || true)"
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+
+      - id: build
+        name: Build and push immutable image
+        env:
+          FIRMAWARE_GIT_SHA: ${{ env.DEPLOY_SHA }}
+        run: bash deploy/build.sh dev
+
+      - name: Pause existing schedule before changing the job
+        run: >-
+          gcloud scheduler jobs pause firmaware-dev-nightly-predict
+          --project="${DEV_GCP_PROJECT_ID}"
+          --location="${GCP_REGION}"
+          --quiet || true
+
+      - name: Terraform init
+        run: >-
+          terraform -chdir=infra init -reconfigure
+          -backend-config="bucket=${DEV_TF_STATE_BUCKET}"
+          -backend-config="prefix=firmaware/dev"
+
+      - name: Terraform plan with scheduler paused
+        run: >-
+          terraform -chdir=infra plan
+          -var-file=envs/dev.tfvars
+          -var="project_id=${GCP_PROJECT_ID}"
+          -var="state_bucket_name=${DEV_TF_STATE_BUCKET}"
+          -var="image_digest=${{ steps.build.outputs.image_digest }}"
+          -var="scheduler_enabled=false"
+          -out=dev.tfplan
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmaware-dev-terraform-plan
+          path: infra/dev.tfplan
+          retention-days: 30
+
+      - name: Apply candidate with schedule paused
+        run: terraform -chdir=infra apply -auto-approve dev.tfplan
+
+      - id: validate
+        name: Validate deployment data
+        continue-on-error: true
+        run: bash deploy/run_job.sh validate dev
+
+      - id: smoke
+        name: Smoke test
+        continue-on-error: true
+        run: bash deploy/smoke_test.sh dev
+
+      - name: Roll back failed candidate
+        if: >-
+          (steps.validate.outcome != 'success' || steps.smoke.outcome != 'success') &&
+          steps.previous-image.outputs.image != ''
+        env:
+          DEV_GCP_PROJECT_ID: ${{ vars.DEV_GCP_PROJECT_ID }}
+          DEV_TF_STATE_BUCKET: ${{ vars.DEV_TF_STATE_BUCKET }}
+        run: bash deploy/rollback_image.sh dev "${{ steps.previous-image.outputs.image }}"
+
+      - name: Fail rejected candidate
+        if: steps.validate.outcome != 'success' || steps.smoke.outcome != 'success'
+        run: |
+          echo "Candidate failed validation or smoke testing; it was not activated." >&2
+          exit 1
+
+      - name: Activate nightly schedule
+        run: >-
+          terraform -chdir=infra apply -auto-approve
+          -var-file=envs/dev.tfvars
+          -var="project_id=${GCP_PROJECT_ID}"
+          -var="state_bucket_name=${DEV_TF_STATE_BUCKET}"
+          -var="image_digest=${{ steps.build.outputs.image_digest }}"
+          -var="scheduler_enabled=true"
+
+      - name: Record successful dev deployment
+        shell: bash
+        run: |
+          champion="$(gcloud storage cat gs://firmaware-dev-artifacts/champion.json)"
+          run_id="$(jq -r '.run_id' <<< "${champion}")"
+          jq -n \
+            --arg image "${{ steps.build.outputs.image_digest }}" \
+            --arg git_sha "${DEPLOY_SHA}" \
+            --arg champion_run_id "${run_id}" \
+            --arg deployed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{image_digest:$image,git_sha:$git_sha,champion_run_id:$champion_run_id,deployed_at:$deployed_at}' \
+            > live.json
+          gcloud storage cp live.json \
+            gs://firmaware-dev-artifacts/deployments/live.json \
+            --content-type=application/json \
+            --quiet
+
+      - name: Deployment identity
+        run: |
+          {
+            echo "### FirmAware dev deployment"
+            echo "- Git SHA: \`${DEPLOY_SHA}\`"
+            echo "- Image: \`${{ steps.build.outputs.image_digest }}\`"
+            gcloud storage cat gs://firmaware-dev-artifacts/deployments/live.json \
+              | sed 's/^/    /'
+          } >> "${GITHUB_STEP_SUMMARY}"

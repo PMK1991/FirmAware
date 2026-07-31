@@ -2,7 +2,14 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+FirmAware_GCP_Deployment_Spec.md
 notebook_runs/
+.terraform/
+*.tfplan
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+gha-creds-*.json
 mlflow.db
 mlruns/
 /.artifacts-*.staging/

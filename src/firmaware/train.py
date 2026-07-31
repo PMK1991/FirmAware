@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import shutil
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,6 +30,12 @@ from .evaluation import (
     threshold_sweep,
 )
 from .features import LABEL_COLUMN, derive_features, model_inputs
+from .io import (
+    is_gcs_uri,
+    join_uri,
+    publish_artifact_run,
+    read_csv,
+)
 from .model import FirmAwarePyFuncModel, score_dataframe, serving_signature
 from .schema import (
     CATEGORICAL_COLUMNS,
@@ -720,15 +727,16 @@ def _promote_artifacts(staging: Path, target: Path, run_id: str) -> None:
         shutil.rmtree(backup)
 
 
-def train(
+def _train_impl(
     input_path: str | Path,
-    config_path: str | Path = "config.yaml",
-    artifacts_dir: str | Path = "artifacts",
+    config_path: str | Path,
+    artifacts_dir: str | Path,
+    remote_artifacts_uri: str | None,
 ) -> dict[str, Any]:
     """Tune on rolling CV, compare family winners on holdout, and publish."""
     config = load_config(config_path)
     tracking = configure_tracking(config["mlflow"], config_path)
-    raw = pd.read_csv(input_path)
+    raw = read_csv(input_path)
     validated = validate(raw, mode="training")
     featured = derive_features(validated, mode="training")
     train_side, test_side, cutoff = split_by_time(featured, config)
@@ -992,6 +1000,12 @@ def train(
             "calibrated": config["calibrate"],
             "timestamp": timestamp,
             "spec_version": SPEC_VERSION,
+            "artifact_run_id": parent_run_id,
+            "artifact_uri": (
+                join_uri(remote_artifacts_uri, f"runs/{parent_run_id}")
+                if remote_artifacts_uri
+                else str(target_output_dir)
+            ),
             "mlflow": {
                 "tracking_uri": tracking["display_tracking_uri"],
                 "experiment_name": tracking["experiment_name"],
@@ -1084,7 +1098,19 @@ def train(
             )
         _write_json(metadata_path, metadata)
         mlflow.log_artifact(str(metadata_path), artifact_path="pipeline")
-        _promote_artifacts(output_dir, target_output_dir, parent_run_id)
+        if remote_artifacts_uri:
+            pointer = publish_artifact_run(
+                output_dir,
+                remote_artifacts_uri,
+                parent_run_id,
+                promoted_at=timestamp,
+            )
+            print(
+                f"[artifacts] champion: {remote_artifacts_uri.rstrip('/')}/"
+                f"champion.json -> {pointer['run_id']}"
+            )
+        else:
+            _promote_artifacts(output_dir, target_output_dir, parent_run_id)
         print(f"[mlflow] run: {metadata['mlflow']['model_uri']}")
         if metadata["mlflow"]["registered_model_uri"]:
             print(
@@ -1093,3 +1119,22 @@ def train(
             )
 
     return metadata
+
+
+def train(
+    input_path: str | Path,
+    config_path: str | Path = "config.yaml",
+    artifacts_dir: str | Path = "artifacts",
+) -> dict[str, Any]:
+    """Train locally or publish an immutable run plus champion pointer to GCS."""
+    if is_gcs_uri(artifacts_dir):
+        with tempfile.TemporaryDirectory(
+            prefix="firmaware-training-"
+        ) as directory:
+            return _train_impl(
+                input_path,
+                config_path,
+                Path(directory) / "artifacts",
+                str(artifacts_dir),
+            )
+    return _train_impl(input_path, config_path, artifacts_dir, None)

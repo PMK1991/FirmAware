@@ -85,6 +85,7 @@ class SchemaTests(unittest.TestCase):
             validate(duplicate, mode="training")
 
         non_numeric = make_training_frame(8)
+        non_numeric["uptime_days"] = non_numeric["uptime_days"].astype(object)
         non_numeric.loc[0, "uptime_days"] = "not-a-number"
         with self.assertRaisesRegex(ContractViolation, "not-a-number"):
             validate(non_numeric, mode="training")
@@ -110,4 +111,3 @@ class _temporary_csv:
 
 if __name__ == "__main__":
     unittest.main()
-

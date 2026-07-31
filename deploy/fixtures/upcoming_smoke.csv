@@ -1,0 +1,6 @@
+deployment_id,device_id,vendor_name,device_type,hardware_series,fleet_tier,current_firmware,target_firmware,firmware_fingerprint,version_jump_magnitude,kernel_touched,bootloader_touched,site_id,site_criticality,network_stress_score,cross_vendor_dependency_count,dependent_device_count,protocol_mismatch_flag,error_rate_predeploy,uptime_days,past_failure_count,firmware_release_age_days,cve_count,max_cvss_score,deployment_type,maintenance_window,deployment_date
+smoke-001,device-001,Siemens,PLC,ET200MP,TIER_2,1.2.0,2.0.0,smoke-fp-001,1.0,1,0,site-01,MEDIUM,0.25,1,5,0,0.01,120,0,45,1,5.0,SCHEDULED,1,2026-07-22
+smoke-002,device-002,Schneider,RTU,T300,TIER_3,2.1.0,2.3.0,smoke-fp-002,0.2,0,0,site-02,LOW,0.40,0,2,0,0.02,365,1,90,0,0.0,MAINTENANCE_WINDOW,1,2026-07-22
+smoke-003,device-003,Cisco,Gateway,IC3000,TIER_1,3.0.0,4.0.0,smoke-fp-003,1.0,1,1,site-03,HIGH,0.80,2,12,1,0.08,30,2,10,4,8.5,EMERGENCY,0,2026-07-22
+smoke-004,device-004,Honeywell,HMI,MTP1000,TIER_2,5.4.0,5.5.0,smoke-fp-004,0.1,0,1,site-04,MEDIUM,0.55,1,8,0,0.03,210,1,60,2,6.5,SCHEDULED,1,2026-07-22
+smoke-005,device-005,Moxa,Switch,S7-1200,TIER_3,1.0.0,2.0.0,smoke-fp-005,1.0,0,0,site-05,LOW,0.35,0,3,0,0.01,500,0,120,0,0.0,SCHEDULED,1,2026-07-22

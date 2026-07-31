@@ -5,6 +5,11 @@ time-aware hyperparameter tuning, detailed MLflow experiment tracking, model
 registry publication, and a raw-input model package that can be served locally
 or moved to Azure ML and GCP.
 
+The GCP batch deployment, Terraform modules, keyless CI/CD, smoke tests, and
+rollback runbook are documented in [`infra/README.md`](infra/README.md).
+The exploratory-to-deployment notebook workflow is documented in
+[`notebooks/README.md`](notebooks/README.md).
+
 ## Project context
 
 Firmware deployment failures can make devices unavailable, force rollback, or
@@ -375,8 +380,7 @@ mlflow models build-docker -m "models:/FirmAwareRiskModel/$version" -n firmaware
 
 ## Azure ML and GCP
 
-No provider SDK is imported by the pipeline. Standard MLflow environment
-variables redirect the same training command:
+Standard MLflow environment variables can redirect experiment tracking:
 
 ```powershell
 $env:MLFLOW_TRACKING_URI = "https://your-mlflow-tracking-endpoint"
@@ -390,11 +394,12 @@ For **Azure ML**, install `azureml-mlflow` in the Azure job image and set
 supplies authentication; the run, artifacts, and registered PyFunc model are
 published to the workspace.
 
-For **GCP**, point `MLFLOW_TRACKING_URI` at a standard MLflow server on Cloud
-Run or GKE backed by PostgreSQL. Configure that server with a `gs://` artifact
-destination and workload identity. If a training job talks directly to a
-database-backed tracking store instead of an HTTP server, set
-`FIRMAWARE_MLFLOW_ARTIFACT_ROOT=gs://your-bucket/path`.
+For **GCP batch deployment**, FirmAware lazily imports `google-cloud-storage`
+only for `gs://` URIs. Cloud Run Jobs read inputs from GCS, publish immutable
+model runs plus `champion.json`, and create one new score object per execution.
+The Cloud deployment intentionally has no MLflow server: GCS metadata is its
+system of record, while the local SQLite MLflow store remains available for
+development. See [`infra/README.md`](infra/README.md).
 
 When tracking through a remote HTTP or managed endpoint, FirmAware leaves
 artifact routing to the server unless an explicit cloud artifact URI is set.
@@ -427,19 +432,19 @@ holdout comparison.
 ## Tests
 
 ```powershell
-python -m unittest discover -s tests -v
+python -m pytest -q
 ```
 
-Verified output on 2026-07-22:
+Verified output on 2026-07-23:
 
 ```text
-Ran 12 tests in 18.901s
-
-OK
+23 passed in 14.80s
 ```
 
 The suite covers the data contract, label behavior, signed version features,
 persisted transform parity, OOD encoding, strict outer and rolling time splits,
 deterministic metrics, leakage exclusion, append-only output, MLflow nested
 tracking, registry publication, detailed evaluation artifacts, hosted/local
-prediction parity, and hosted inference with nullable numeric values.
+prediction parity, hosted inference with nullable numeric values, lazy GCS I/O,
+immutable model runs, champion digest verification, environment-driven CLI
+defaults, and one-object-per-run cloud scoring.

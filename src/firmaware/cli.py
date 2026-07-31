@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import mlflow
 import pandas as pd
 
 from .predict import predict
+from .io import join_uri, read_csv
 from .schema import ContractViolation, validate
 from .train import train
 
@@ -18,25 +20,25 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     validate_parser = commands.add_parser("validate")
-    validate_parser.add_argument("--input", required=True, type=Path)
+    validate_parser.add_argument("--input")
     validate_parser.add_argument(
         "--mode", required=True, choices=("training", "scoring")
     )
 
     train_parser = commands.add_parser("train")
-    train_parser.add_argument("--input", required=True, type=Path)
+    train_parser.add_argument("--input")
     train_parser.add_argument("--config", type=Path, default=Path("config.yaml"))
     train_parser.add_argument(
-        "--artifacts-dir", type=Path, default=Path("artifacts")
+        "--artifacts-dir"
     )
 
     predict_parser = commands.add_parser("predict")
-    predict_parser.add_argument("--input", required=True, type=Path)
+    predict_parser.add_argument("--input")
     predict_parser.add_argument(
-        "--artifacts-dir", type=Path, default=Path("artifacts")
+        "--artifacts-dir"
     )
     predict_parser.add_argument(
-        "--output", type=Path, default=Path("outputs") / "scores.csv"
+        "--output"
     )
     return parser
 
@@ -44,20 +46,37 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        data_uri = os.getenv("FIRMAWARE_DATA_URI", "data")
+        artifacts_uri = os.getenv("FIRMAWARE_ARTIFACTS_URI", "artifacts")
+        scores_uri = os.getenv(
+            "FIRMAWARE_SCORES_URI", str(Path("outputs") / "scores.csv")
+        )
         if args.command == "validate":
-            validate(pd.read_csv(args.input), mode=args.mode)
-            print(f"[validate] valid {args.mode} input: {args.input}")
+            default_name = (
+                "deployment_events.csv"
+                if args.mode == "training"
+                else "upcoming_deployments.csv"
+            )
+            input_uri = args.input or join_uri(data_uri, default_name)
+            validate(read_csv(input_uri), mode=args.mode)
+            print(f"[validate] valid {args.mode} input: {input_uri}")
         elif args.command == "train":
+            input_uri = args.input or join_uri(
+                data_uri, "deployment_events.csv"
+            )
             train(
-                args.input,
+                input_uri,
                 config_path=args.config,
-                artifacts_dir=args.artifacts_dir,
+                artifacts_dir=args.artifacts_dir or artifacts_uri,
             )
         elif args.command == "predict":
+            input_uri = args.input or join_uri(
+                data_uri, "upcoming_deployments.csv"
+            )
             predict(
-                args.input,
-                artifacts_dir=args.artifacts_dir,
-                output_path=args.output,
+                input_uri,
+                artifacts_dir=args.artifacts_dir or artifacts_uri,
+                output_path=args.output or scores_uri,
             )
     except (
         ContractViolation,

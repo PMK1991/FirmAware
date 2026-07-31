@@ -192,6 +192,9 @@ class EndToEndTests(unittest.TestCase):
                 check_dtype=False,
             )
             nullable_scoring = scoring.iloc[:1].copy()
+            nullable_scoring["uptime_days"] = nullable_scoring[
+                "uptime_days"
+            ].astype(float)
             nullable_scoring.loc[:, "uptime_days"] = np.nan
             nullable_hosted = hosted_model.predict(nullable_scoring)
             self.assertEqual(len(nullable_hosted), 1)
