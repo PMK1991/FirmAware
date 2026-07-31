@@ -1,0 +1,16 @@
+.git
+.github
+.pytest_cache
+__pycache__
+*.py[cod]
+*.egg-info
+.venv
+gha-creds-*.json
+artifacts
+data
+mlflow.db
+mlruns
+outputs
+infra
+tests
+FirmAware_GCP_Deployment_Spec.md

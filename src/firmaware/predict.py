@@ -11,6 +11,7 @@ import joblib
 import pandas as pd
 
 from .model import SCORE_COLUMNS, score_dataframe
+from .io import materialize_artifacts, read_csv, write_scores
 from .schema import ContractViolation
 from .train import SPEC_VERSION
 from .transform import Preprocessor
@@ -40,44 +41,32 @@ def _load_artifacts(artifacts_dir: Path) -> tuple[Any, Preprocessor, dict[str, A
     return model, preprocessor, metadata
 
 
-def _append_scores(scores: pd.DataFrame, output_path: Path) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    if output_path.exists() and output_path.stat().st_size:
-        existing_columns = pd.read_csv(output_path, nrows=0).columns.tolist()
-        if existing_columns != OUTPUT_COLUMNS:
-            raise ContractViolation(
-                f"Existing scores file has incompatible columns: {existing_columns}"
-            )
-        scores.to_csv(
-            output_path,
-            mode="a",
-            header=False,
-            index=False,
-            float_format="%.4f",
-        )
-    else:
-        scores.to_csv(
-            output_path,
-            mode="a",
-            header=True,
-            index=False,
-            float_format="%.4f",
-        )
-
-
 def predict(
     input_path: str | Path,
     artifacts_dir: str | Path = "artifacts",
     output_path: str | Path = "outputs/scores.csv",
 ) -> pd.DataFrame:
     """Use the persisted threshold as the sole source of decisions and bands."""
-    model, preprocessor, metadata = _load_artifacts(Path(artifacts_dir))
-    raw = pd.read_csv(input_path)
-    scores = score_dataframe(raw, model, preprocessor, metadata)
-    scored_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    scores["scored_at"] = scored_at
-    scores = scores[OUTPUT_COLUMNS]
-    _append_scores(scores, Path(output_path))
+    with materialize_artifacts(artifacts_dir) as local_artifacts:
+        model, preprocessor, metadata = _load_artifacts(local_artifacts)
+        raw = read_csv(input_path)
+        scores = score_dataframe(raw, model, preprocessor, metadata)
+        scored_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        scores["scored_at"] = scored_at
+        scores = scores[OUTPUT_COLUMNS]
+        run_id = str(
+            metadata.get("artifact_run_id")
+            or metadata.get("mlflow", {}).get("run_id")
+            or metadata["timestamp"]
+        )
+        written_uri = write_scores(
+            scores,
+            output_path,
+            scored_at,
+            run_id,
+            OUTPUT_COLUMNS,
+        )
+        print(f"[predict] scores: {written_uri}")
 
     decision_counts = scores["risk_prediction"].value_counts().to_dict()
     band_counts = scores["risk_band"].value_counts().to_dict()

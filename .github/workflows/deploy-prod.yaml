@@ -1,0 +1,207 @@
+name: Promote prod
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: firmaware-prod
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEV_GCP_PROJECT_ID: ${{ vars.DEV_GCP_PROJECT_ID }}
+      PROD_GCP_PROJECT_ID: ${{ vars.PROD_GCP_PROJECT_ID }}
+      PROD_TF_STATE_BUCKET: ${{ vars.PROD_TF_STATE_BUCKET }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth-dev
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.DEV_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.DEV_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          version: ">= 500.0.0"
+
+      - id: dev-image
+        name: Verify and pull the last successful dev image
+        shell: bash
+        run: |
+          record="$(gcloud storage cat \
+            gs://firmaware-dev-artifacts/deployments/live.json)"
+          image="$(jq -r '.image_digest' <<< "${record}")"
+          recorded_sha="$(jq -r '.git_sha' <<< "${record}")"
+          tag_sha="$(git rev-parse HEAD)"
+          live_image="$(gcloud run jobs describe firmaware-dev-predict \
+            --project "${DEV_GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format='value(spec.template.spec.template.spec.containers[0].image)')"
+          if [[ "${recorded_sha}" != "${tag_sha}" ]]; then
+            echo "Tag commit ${tag_sha} is not the successful dev commit ${recorded_sha}" >&2
+            exit 1
+          fi
+          if [[ "${image}" != "${live_image}" ]]; then
+            echo "Recorded successful image is not currently live in dev" >&2
+            exit 1
+          fi
+          if [[ ! "${image}" =~ @sha256:[0-9a-f]{64}$ ]]; then
+            echo "Dev job is not pinned to a digest: ${image}" >&2
+            exit 1
+          fi
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          docker pull "${image}"
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          echo "digest=${image##*@}" >> "${GITHUB_OUTPUT}"
+
+      - id: auth-prod
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.PROD_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PROD_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - id: previous-image
+        name: Record previous production image
+        shell: bash
+        run: |
+          image="$(gcloud run jobs describe firmaware-prod-predict \
+            --project "${PROD_GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --format='value(spec.template.spec.template.spec.containers[0].image)' \
+            2>/dev/null || true)"
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+
+      - id: prod-image
+        name: Promote the tested manifest without rebuilding
+        shell: bash
+        run: |
+          target="${GCP_REGION}-docker.pkg.dev/${PROD_GCP_PROJECT_ID}/firmaware/firmaware:${GITHUB_REF_NAME}"
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          if digest="$(gcloud artifacts docker images describe "${target}" \
+            --project "${PROD_GCP_PROJECT_ID}" \
+            --format='value(image_summary.digest)' 2>/dev/null)"; then
+            echo "Reusing existing immutable production tag ${target}"
+          else
+            docker tag "${{ steps.dev-image.outputs.image }}" "${target}"
+            docker push "${target}"
+            digest="$(gcloud artifacts docker images describe "${target}" \
+              --project "${PROD_GCP_PROJECT_ID}" \
+              --format='value(image_summary.digest)')"
+          fi
+          if [[ "${digest}" != "${{ steps.dev-image.outputs.digest }}" ]]; then
+            echo "Promotion changed digest: dev=${{ steps.dev-image.outputs.digest }} prod=${digest}" >&2
+            exit 1
+          fi
+          echo "image_digest=${target%:*}@${digest}" >> "${GITHUB_OUTPUT}"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+
+      - name: Pause existing schedule before changing the job
+        run: >-
+          gcloud scheduler jobs pause firmaware-prod-nightly-predict
+          --project="${PROD_GCP_PROJECT_ID}"
+          --location="${GCP_REGION}"
+          --quiet || true
+
+      - name: Terraform init
+        run: >-
+          terraform -chdir=infra init
+          -backend-config="bucket=${PROD_TF_STATE_BUCKET}"
+          -backend-config="prefix=firmaware/prod"
+
+      - name: Terraform plan with scheduler paused
+        run: >-
+          terraform -chdir=infra plan
+          -var-file=envs/prod.tfvars
+          -var="project_id=${PROD_GCP_PROJECT_ID}"
+          -var="state_bucket_name=${PROD_TF_STATE_BUCKET}"
+          -var="image_digest=${{ steps.prod-image.outputs.image_digest }}"
+          -var="scheduler_enabled=false"
+          -out=prod.tfplan
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmaware-prod-terraform-plan
+          path: infra/prod.tfplan
+          retention-days: 90
+
+      - name: Apply candidate with schedule paused
+        run: terraform -chdir=infra apply -auto-approve prod.tfplan
+
+      - id: validate
+        name: Validate production data
+        continue-on-error: true
+        env:
+          GCP_PROJECT_ID: ${{ vars.PROD_GCP_PROJECT_ID }}
+        run: bash deploy/run_job.sh validate prod
+
+      - id: smoke
+        name: Smoke test
+        continue-on-error: true
+        env:
+          GCP_PROJECT_ID: ${{ vars.PROD_GCP_PROJECT_ID }}
+        run: bash deploy/smoke_test.sh prod
+
+      - name: Roll back failed candidate
+        if: >-
+          (steps.validate.outcome != 'success' || steps.smoke.outcome != 'success') &&
+          steps.previous-image.outputs.image != ''
+        env:
+          PROD_GCP_PROJECT_ID: ${{ vars.PROD_GCP_PROJECT_ID }}
+          PROD_TF_STATE_BUCKET: ${{ vars.PROD_TF_STATE_BUCKET }}
+        run: bash deploy/rollback_image.sh prod "${{ steps.previous-image.outputs.image }}"
+
+      - name: Fail rejected candidate
+        if: steps.validate.outcome != 'success' || steps.smoke.outcome != 'success'
+        run: |
+          echo "Candidate failed validation or smoke testing; it was not activated." >&2
+          exit 1
+
+      - name: Activate nightly schedule
+        run: >-
+          terraform -chdir=infra apply -auto-approve
+          -var-file=envs/prod.tfvars
+          -var="project_id=${PROD_GCP_PROJECT_ID}"
+          -var="state_bucket_name=${PROD_TF_STATE_BUCKET}"
+          -var="image_digest=${{ steps.prod-image.outputs.image_digest }}"
+          -var="scheduler_enabled=true"
+
+      - name: Record successful production deployment
+        shell: bash
+        run: |
+          champion="$(gcloud storage cat gs://firmaware-prod-artifacts/champion.json)"
+          run_id="$(jq -r '.run_id' <<< "${champion}")"
+          jq -n \
+            --arg image "${{ steps.prod-image.outputs.image_digest }}" \
+            --arg git_sha "$(git rev-parse HEAD)" \
+            --arg champion_run_id "${run_id}" \
+            --arg deployed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{image_digest:$image,git_sha:$git_sha,champion_run_id:$champion_run_id,deployed_at:$deployed_at}' \
+            > live.json
+          gcloud storage cp live.json \
+            gs://firmaware-prod-artifacts/deployments/live.json \
+            --content-type=application/json \
+            --quiet
+
+      - name: Promotion identity
+        run: |
+          {
+            echo "### FirmAware production promotion"
+            echo "- Dev digest: \`${{ steps.dev-image.outputs.digest }}\`"
+            echo "- Prod image: \`${{ steps.prod-image.outputs.image_digest }}\`"
+            gcloud storage cat gs://firmaware-prod-artifacts/deployments/live.json \
+              | sed 's/^/    /'
+          } >> "${GITHUB_STEP_SUMMARY}"

@@ -9,11 +9,29 @@ description = "A portable MLflow firmware deployment risk pipeline"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "pandas>=2.0",
-  "scikit-learn>=1.4",
-  "xgboost>=2.0",
-  "PyYAML>=6.0",
-  "mlflow>=2.16,<4",
+  "pandas==2.2.3",
+  "scikit-learn==1.6.1",
+  "xgboost==3.0.5",
+  "PyYAML==6.0.2",
+  "mlflow==3.14.0",
+  "google-cloud-storage==3.13.0",
+]
+
+[project.optional-dependencies]
+app = [
+  "streamlit==1.51.0",
+  "plotly==6.4.0",
+]
+dev = [
+  "pytest>=8.0,<9",
+  "ruff>=0.9,<1",
+]
+notebooks = [
+  "ipykernel>=6.29,<7",
+  "jupyterlab>=4.3,<5",
+  "matplotlib>=3.9,<4",
+  "nbclient>=0.10,<1",
+  "seaborn>=0.13,<1",
 ]
 
 [tool.setuptools.packages.find]

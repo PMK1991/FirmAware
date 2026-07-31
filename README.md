@@ -5,6 +5,11 @@ time-aware hyperparameter tuning, detailed MLflow experiment tracking, model
 registry publication, and a raw-input model package that can be served locally
 or moved to Azure ML and GCP.
 
+The GCP batch deployment, Terraform modules, keyless CI/CD, smoke tests, and
+rollback runbook are documented in [`infra/README.md`](infra/README.md).
+The exploratory-to-deployment notebook workflow is documented in
+[`notebooks/README.md`](notebooks/README.md).
+
 ## Project context
 
 Firmware deployment failures can make devices unavailable, force rollback, or
@@ -375,8 +380,7 @@ mlflow models build-docker -m "models:/FirmAwareRiskModel/$version" -n firmaware
 
 ## Azure ML and GCP
 
-No provider SDK is imported by the pipeline. Standard MLflow environment
-variables redirect the same training command:
+Standard MLflow environment variables can redirect experiment tracking:
 
 ```powershell
 $env:MLFLOW_TRACKING_URI = "https://your-mlflow-tracking-endpoint"
@@ -390,11 +394,12 @@ For **Azure ML**, install `azureml-mlflow` in the Azure job image and set
 supplies authentication; the run, artifacts, and registered PyFunc model are
 published to the workspace.
 
-For **GCP**, point `MLFLOW_TRACKING_URI` at a standard MLflow server on Cloud
-Run or GKE backed by PostgreSQL. Configure that server with a `gs://` artifact
-destination and workload identity. If a training job talks directly to a
-database-backed tracking store instead of an HTTP server, set
-`FIRMAWARE_MLFLOW_ARTIFACT_ROOT=gs://your-bucket/path`.
+For **GCP batch deployment**, FirmAware lazily imports `google-cloud-storage`
+only for `gs://` URIs. Cloud Run Jobs read inputs from GCS, publish immutable
+model runs plus `champion.json`, and create one new score object per execution.
+The Cloud deployment intentionally has no MLflow server: GCS metadata is its
+system of record, while the local SQLite MLflow store remains available for
+development. See [`infra/README.md`](infra/README.md).
 
 When tracking through a remote HTTP or managed endpoint, FirmAware leaves
 artifact routing to the server unless an explicit cloud artifact URI is set.
@@ -406,6 +411,42 @@ Prediction uses the persisted champion and pooled-CV-selected threshold, then
 appends rows to `outputs\scores.csv`. Unknown categorical values are encoded as
 all-zero one-hot blocks and printed as prominent warnings while still being
 scored. Existing score history is never overwritten.
+
+## Predictions page
+
+`app.py` is a read-only Streamlit page over scores the pipeline has already
+written. It never trains, scores, or writes anything, so it is safe to point at
+a live environment.
+
+```powershell
+python -m pip install -e ".[app]"
+python -m firmaware predict
+streamlit run app.py
+```
+
+It reads the same environment contract as the pipeline, so the identical command
+serves cloud output:
+
+```powershell
+$env:FIRMAWARE_SCORES_URI = "gs://firmaware-dev-scores/scores"
+$env:FIRMAWARE_ARTIFACTS_URI = "gs://firmaware-dev-artifacts"
+$env:FIRMAWARE_DATA_URI = "gs://firmaware-dev-data"
+streamlit run app.py
+```
+
+Two views share one scored dataset. **Fleet Overview** ranks the register with
+filters, a fleet-average gauge, and band, decision, and tier distributions.
+**Deployment Inspector** shows one deployment's GO/NO_GO stamp, probability
+gauge, equipment attributes, and risk flags.
+
+The page imports `firmaware.schema`, `firmaware.features`, and `firmaware.io`
+rather than restating them, and it reads the decision threshold from the
+champion's `metadata.json`. Gauge zones are therefore derived from the live
+threshold instead of fixed cut points, so the display cannot drift from
+`model.score_dataframe`. When several scoring runs exist, the newest is shown and
+a sidebar selector exposes the earlier immutable objects. Flags the model
+consumes are labeled separately from operator context that only annotates a
+deployment.
 
 ## Decisions where the specification was silent
 
@@ -427,19 +468,21 @@ holdout comparison.
 ## Tests
 
 ```powershell
-python -m unittest discover -s tests -v
+python -m pytest -q
 ```
 
-Verified output on 2026-07-22:
+Verified output on 2026-08-01:
 
 ```text
-Ran 12 tests in 18.901s
-
-OK
+32 passed in 49.06s
 ```
 
 The suite covers the data contract, label behavior, signed version features,
 persisted transform parity, OOD encoding, strict outer and rolling time splits,
 deterministic metrics, leakage exclusion, append-only output, MLflow nested
 tracking, registry publication, detailed evaluation artifacts, hosted/local
-prediction parity, and hosted inference with nullable numeric values.
+prediction parity, hosted inference with nullable numeric values, lazy GCS I/O,
+immutable model runs, champion digest verification, environment-driven CLI
+defaults, one-object-per-run cloud scoring, run listing order across both
+stores, and the predictions page in both views, including its threshold-derived
+gauge zones, run selection, missing-scores handling, and read-only behavior.
