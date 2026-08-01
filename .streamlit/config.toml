@@ -1,0 +1,11 @@
+# Theme so Streamlit's own widgets (dataframe, selects, buttons) match the
+# page design instead of rendering light against a dark background.
+[theme]
+base = "dark"
+primaryColor = "#FF5470"
+backgroundColor = "#0A1628"
+secondaryBackgroundColor = "#0F2138"
+textColor = "#EAF2FA"
+
+[browser]
+gatherUsageStats = false
