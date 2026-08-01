@@ -1,6 +1,8 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+build/
+dist/
 .pytest_cache/
 FirmAware_GCP_Deployment_Spec.md
 notebook_runs/

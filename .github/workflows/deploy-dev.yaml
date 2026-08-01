@@ -54,7 +54,7 @@ jobs:
           cache: pip
       - name: Confirm tests for deployment SHA
         run: |
-          python -m pip install -e ".[dev]"
+          python -m pip install -e ".[dev,app,train]"
           ruff check src tests
           python -m pytest -q
 

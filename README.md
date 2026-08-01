@@ -309,8 +309,14 @@ Python 3.11 or newer is required. From the project root:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e .
+python -m pip install -e ".[train]"
 ```
+
+The base install carries only the schema, feature and IO modules. Modelling
+lives behind the `train` extra, the read-only page behind `app`, and tooling
+behind `dev`; use `".[dev,app,train]"` to work on the whole repository. The
+split is what keeps the hosted page off scikit-learn, xgboost and MLflow, which
+it never calls: 402 MB over 55 packages rather than 855 MB over 114.
 
 Place `deployment_events.csv` and `upcoming_deployments.csv` in `data\`.
 Training input has the 30-column schema in the specification. Scoring input

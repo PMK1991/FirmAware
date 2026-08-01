@@ -9,7 +9,7 @@ RUN python -m venv "${VIRTUAL_ENV}" \
 WORKDIR /build
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[train]"
 
 FROM python:3.11-slim AS runtime
 
