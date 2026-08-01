@@ -255,26 +255,20 @@ platforms.
 
 ### Deployed GCP architecture
 
-The table above is the portable design. The diagrams below are the concrete
-deployment that is live in GCP project `firmaware` (`us-central1`, `dev`), drawn
-from the Terraform in `infra/` and the workflows in `.github/workflows/`.
+The table above is the portable design. These two diagrams are the concrete
+deployment live in project `firmaware` (`us-central1`, `dev`), taken from
+`infra/` and `.github/workflows/`. The editable source is
+[`docs/architecture/firmaware-gcp-architecture.drawio`](docs/architecture/firmaware-gcp-architecture.drawio);
+re-export the PNGs whenever it changes.
 
-The editable source is
-[`docs/architecture/firmaware-gcp-architecture.drawio`](docs/architecture/firmaware-gcp-architecture.drawio),
-a two-page diagrams.net file. Open it at [app.diagrams.net](https://app.diagrams.net)
-or in the draw.io desktop app. The PNGs below are exported from it, so regenerate
-them whenever the source changes.
-
-**Page 1 — runtime architecture.** Cloud Scheduler triggers the nightly
-`predict` job; the three Cloud Run Jobs share one runtime service account but
-each bucket grants only the roles that job needs; the Streamlit page sits outside
-GCP and reads scores only.
+Cloud Scheduler triggers the nightly `predict` job. The three Cloud Run Jobs
+share one runtime identity, but each bucket grants only the roles that job
+needs, and the Streamlit page sits outside GCP reading scores only.
 
 ![GCP runtime architecture](docs/images/gcp-runtime-architecture.png)
 
-**Page 2 — CI/CD and progressive delivery.** GitHub authenticates to GCP without
-a stored key, then a candidate image is applied with the scheduler paused and is
-proven against real data before the nightly schedule is allowed to resume.
+GitHub authenticates without a stored key, then a candidate is applied with the
+scheduler paused and proven against real data before the schedule resumes.
 
 ![GCP CI/CD architecture](docs/images/gcp-cicd-architecture.png)
 

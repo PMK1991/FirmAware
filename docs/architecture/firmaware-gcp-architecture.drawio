@@ -1,112 +1,100 @@
 <mxfile host="app.diagrams.net" type="device" version="24.7.17">
   <diagram id="firmaware-runtime" name="1 · Runtime architecture">
-    <mxGraphModel dx="1800" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="1500" dy="940" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="940" math="0" shadow="0">
       <root>
         <mxCell id="r0" />
         <mxCell id="r1" parent="r0" />
 
         <mxCell id="rTitle" value="FirmAware — GCP runtime architecture" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#202124;" vertex="1" parent="r1">
-          <mxGeometry x="40" y="18" width="1000" height="32" as="geometry" />
+          <mxGeometry x="40" y="20" width="900" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="rSub" value="project firmaware · region us-central1 · env dev · every resource inside the boundary is provisioned by Terraform in infra/" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#5F6368;" vertex="1" parent="r1">
-          <mxGeometry x="40" y="50" width="1400" height="22" as="geometry" />
+        <mxCell id="rSub" value="project firmaware · us-central1 · env dev · provisioned by Terraform in infra/" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#5F6368;" vertex="1" parent="r1">
+          <mxGeometry x="40" y="50" width="1100" height="20" as="geometry" />
         </mxCell>
 
         <mxCell id="rGcp" value="Google Cloud — project firmaware (us-central1)" style="rounded=1;html=1;dashed=1;dashPattern=8 6;strokeWidth=2;strokeColor=#4285F4;fillColor=none;verticalAlign=top;align=left;spacingLeft=14;spacingTop=6;fontSize=14;fontStyle=1;fontColor=#174EA6;" vertex="1" parent="r1">
-          <mxGeometry x="300" y="95" width="1420" height="780" as="geometry" />
+          <mxGeometry x="280" y="90" width="1180" height="660" as="geometry" />
         </mxCell>
 
-        <mxCell id="rSched" value="&lt;b&gt;Cloud Scheduler&lt;/b&gt;&lt;br&gt;firmaware-dev-nightly-predict&lt;br&gt;0 2 * * *  (Etc/UTC) · ENABLED&lt;br&gt;retries 0 · deadline 600s" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF7E0;strokeColor=#F9AB00;fontSize=12;fontColor=#B06000;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="340" y="140" width="320" height="105" as="geometry" />
+        <mxCell id="rSched" value="&lt;b&gt;Cloud Scheduler&lt;/b&gt;&lt;br&gt;firmaware-dev-nightly-predict&lt;br&gt;0 2 * * * UTC · enabled&lt;br&gt;run.invoker on predict only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF7E0;strokeColor=#F9AB00;fontSize=12;fontColor=#B06000;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="310" y="130" width="300" height="95" as="geometry" />
         </mxCell>
 
-        <mxCell id="rReg" value="&lt;b&gt;Artifact Registry&lt;/b&gt;&lt;br&gt;firmaware (DOCKER)&lt;br&gt;immutable tags · jobs are pinned&lt;br&gt;to an image digest, never a tag" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FD;strokeColor=#A142F4;fontSize=12;fontColor=#6A1B9A;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="1330" y="140" width="370" height="105" as="geometry" />
+        <mxCell id="rReg" value="&lt;b&gt;Artifact Registry&lt;/b&gt;&lt;br&gt;firmaware (DOCKER)&lt;br&gt;immutable tags&lt;br&gt;jobs pinned to a digest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FD;strokeColor=#A142F4;fontSize=12;fontColor=#6A1B9A;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="1130" y="130" width="300" height="95" as="geometry" />
         </mxCell>
 
-        <mxCell id="rJobs" value="Cloud Run Jobs — runtime identity  sa-firmaware-jobs" style="rounded=1;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=14;spacingTop=6;fontSize=13;fontStyle=1;fontColor=#174EA6;" vertex="1" parent="r1">
-          <mxGeometry x="340" y="300" width="890" height="250" as="geometry" />
+        <mxCell id="rJobs" value="Cloud Run Jobs — sa-firmaware-jobs" style="rounded=1;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=14;spacingTop=6;fontSize=13;fontStyle=1;fontColor=#174EA6;" vertex="1" parent="r1">
+          <mxGeometry x="310" y="265" width="800" height="200" as="geometry" />
         </mxCell>
-        <mxCell id="rJobValidate" value="&lt;b&gt;validate&lt;/b&gt;&lt;br&gt;1 vCPU · 2 GiB&lt;br&gt;timeout 600s · retries 1&lt;br&gt;&lt;br&gt;Enforces the data contract&lt;br&gt;before anything is trusted" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4285F4;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="360" y="355" width="270" height="165" as="geometry" />
+        <mxCell id="rJobValidate" value="&lt;b&gt;validate&lt;/b&gt;&lt;br&gt;1 vCPU · 2 GiB&lt;br&gt;&lt;br&gt;Enforces the&lt;br&gt;data contract" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4285F4;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="330" y="310" width="240" height="135" as="geometry" />
         </mxCell>
-        <mxCell id="rJobTrain" value="&lt;b&gt;train&lt;/b&gt;&lt;br&gt;4 vCPU · 8 GiB&lt;br&gt;timeout 1800s · retries 0&lt;br&gt;&lt;br&gt;Tunes, evaluates and promotes&lt;br&gt;the champion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4285F4;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="650" y="355" width="270" height="165" as="geometry" />
+        <mxCell id="rJobTrain" value="&lt;b&gt;train&lt;/b&gt;&lt;br&gt;4 vCPU · 8 GiB&lt;br&gt;&lt;br&gt;Tunes and promotes&lt;br&gt;the champion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4285F4;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="590" y="310" width="240" height="135" as="geometry" />
         </mxCell>
-        <mxCell id="rJobPredict" value="&lt;b&gt;predict&lt;/b&gt;&lt;br&gt;1 vCPU · 2 GiB&lt;br&gt;timeout 600s · retries 1&lt;br&gt;&lt;br&gt;Scores upcoming deployments&lt;br&gt;against the champion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4285F4;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="940" y="355" width="270" height="165" as="geometry" />
-        </mxCell>
-
-        <mxCell id="rStore" value="Cloud Storage — uniform bucket-level access, least privilege per bucket" style="rounded=1;html=1;fillColor=#E6F4EA;strokeColor=#34A853;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=14;spacingTop=6;fontSize=13;fontStyle=1;fontColor=#0D652D;" vertex="1" parent="r1">
-          <mxGeometry x="340" y="610" width="890" height="220" as="geometry" />
-        </mxCell>
-        <mxCell id="rBData" value="&lt;b&gt;firmaware-dev-data&lt;/b&gt;&lt;br&gt;versioned · 90d noncurrent&lt;br&gt;jobs: objectViewer&lt;br&gt;&lt;br&gt;deployment_events.csv&lt;br&gt;upcoming_deployments.csv&lt;br&gt;smoke/upcoming_smoke.csv" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#34A853;fontSize=11;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="360" y="662" width="270" height="150" as="geometry" />
-        </mxCell>
-        <mxCell id="rBArt" value="&lt;b&gt;firmaware-dev-artifacts&lt;/b&gt;&lt;br&gt;versioned · 90d noncurrent&lt;br&gt;jobs: objectAdmin&lt;br&gt;&lt;br&gt;model · preprocessor · metadata&lt;br&gt;champion.json&lt;br&gt;deployments/live.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#34A853;fontSize=11;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="650" y="662" width="270" height="150" as="geometry" />
-        </mxCell>
-        <mxCell id="rBScores" value="&lt;b&gt;firmaware-dev-scores&lt;/b&gt;&lt;br&gt;not versioned&lt;br&gt;jobs: objectCreator + objectViewer&lt;br&gt;&lt;i&gt;no delete permission → append-only&lt;/i&gt;&lt;br&gt;&lt;br&gt;scores/scores_&amp;lt;ts&amp;gt;_&amp;lt;run&amp;gt;.csv" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#34A853;fontSize=11;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="940" y="662" width="270" height="150" as="geometry" />
-        </mxCell>
-        <mxCell id="rNote" value="A fourth bucket, firmaware-…-tf-state, holds Terraform state. It is deploy-time only — the jobs have no access to it. See page 2." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#5F6368;" vertex="1" parent="r1">
-          <mxGeometry x="360" y="842" width="700" height="24" as="geometry" />
+        <mxCell id="rJobPredict" value="&lt;b&gt;predict&lt;/b&gt;&lt;br&gt;1 vCPU · 2 GiB&lt;br&gt;&lt;br&gt;Scores upcoming&lt;br&gt;deployments" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4285F4;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="850" y="310" width="240" height="135" as="geometry" />
         </mxCell>
 
-        <mxCell id="rObs" value="Cloud Logging &amp;amp; Cloud Monitoring" style="rounded=1;html=1;fillColor=#FCE8E6;strokeColor=#EA4335;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=14;spacingTop=6;fontSize=13;fontStyle=1;fontColor=#B31412;" vertex="1" parent="r1">
-          <mxGeometry x="1330" y="300" width="370" height="530" as="geometry" />
+        <mxCell id="rStore" value="Cloud Storage — least privilege per bucket" style="rounded=1;html=1;fillColor=#E6F4EA;strokeColor=#34A853;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=14;spacingTop=6;fontSize=13;fontStyle=1;fontColor=#0D652D;" vertex="1" parent="r1">
+          <mxGeometry x="310" y="525" width="800" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="rBData" value="&lt;b&gt;firmaware-dev-data&lt;/b&gt;&lt;br&gt;objectViewer&lt;br&gt;&lt;br&gt;deployment_events.csv&lt;br&gt;upcoming_deployments.csv" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#34A853;fontSize=11;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="330" y="570" width="240" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="rBArt" value="&lt;b&gt;firmaware-dev-artifacts&lt;/b&gt;&lt;br&gt;objectAdmin&lt;br&gt;&lt;br&gt;model · preprocessor&lt;br&gt;champion.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#34A853;fontSize=11;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="590" y="570" width="240" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="rBScores" value="&lt;b&gt;firmaware-dev-scores&lt;/b&gt;&lt;br&gt;objectCreator + objectViewer&lt;br&gt;&lt;br&gt;&lt;i&gt;append-only — no delete&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#34A853;fontSize=11;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="850" y="570" width="240" height="125" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rObs" value="Cloud Logging &amp;amp; Monitoring" style="rounded=1;html=1;fillColor=#FCE8E6;strokeColor=#EA4335;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=14;spacingTop=6;fontSize=13;fontStyle=1;fontColor=#B31412;" vertex="1" parent="r1">
+          <mxGeometry x="1150" y="265" width="290" height="450" as="geometry" />
         </mxCell>
         <mxCell id="rLog" value="&lt;b&gt;Log-based metrics&lt;/b&gt;&lt;br&gt;&lt;br&gt;job_failure&lt;br&gt;contract_violation&lt;br&gt;smoke_contract_violation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#EA4335;fontSize=11;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="1350" y="355" width="330" height="125" as="geometry" />
+          <mxGeometry x="1170" y="315" width="250" height="115" as="geometry" />
         </mxCell>
-        <mxCell id="rAlert" value="&lt;b&gt;Alert policy&lt;/b&gt;&lt;br&gt;&lt;br&gt;4 conditions, OR-combined&lt;br&gt;auto-close after 30m" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#EA4335;fontSize=11;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="1350" y="530" width="330" height="105" as="geometry" />
+        <mxCell id="rAlert" value="&lt;b&gt;Alert policy&lt;/b&gt;&lt;br&gt;&lt;br&gt;4 conditions · OR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#EA4335;fontSize=11;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="1170" y="480" width="250" height="85" as="geometry" />
         </mxCell>
-        <mxCell id="rMail" value="&lt;b&gt;Email notification channel&lt;/b&gt;&lt;br&gt;on-call owner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#EA4335;fontSize=11;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="1350" y="690" width="330" height="85" as="geometry" />
-        </mxCell>
-
-        <mxCell id="rSrc" value="&lt;b&gt;Data source / operator&lt;/b&gt;&lt;br&gt;&lt;br&gt;Uploads the two contract CSVs&lt;br&gt;deployment_events.csv&lt;br&gt;upcoming_deployments.csv" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F3F4;strokeColor=#5F6368;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="40" y="662" width="240" height="150" as="geometry" />
+        <mxCell id="rMail" value="&lt;b&gt;Email notification&lt;/b&gt;&lt;br&gt;on-call owner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#EA4335;fontSize=11;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="1170" y="615" width="250" height="75" as="geometry" />
         </mxCell>
 
-        <mxCell id="rApp" value="&lt;b&gt;Streamlit predictions page&lt;/b&gt; — app.py, runs outside GCP&lt;br&gt;&lt;br&gt;FIRMAWARE_SCORES_URI · FIRMAWARE_ARTIFACTS_URI · FIRMAWARE_DATA_URI&lt;br&gt;&lt;br&gt;Reads the newest score object and the champion threshold, then renders the&lt;br&gt;fleet overview and the deployment inspector. Never trains, scores or writes." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F3F4;strokeColor=#5F6368;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
-          <mxGeometry x="795" y="920" width="560" height="130" as="geometry" />
+        <mxCell id="rSrc" value="&lt;b&gt;Data source / operator&lt;/b&gt;&lt;br&gt;&lt;br&gt;Uploads the two&lt;br&gt;contract CSVs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F3F4;strokeColor=#5F6368;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="40" y="570" width="220" height="125" as="geometry" />
         </mxCell>
 
-        <mxCell id="rE1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#F9AB00;endArrow=blockThin;endFill=1;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="r1" source="rSched" target="rJobPredict">
+        <mxCell id="rApp" value="&lt;b&gt;Streamlit page&lt;/b&gt; — app.py, runs outside GCP&lt;br&gt;&lt;br&gt;Read-only: the newest scores and the champion threshold" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F3F4;strokeColor=#5F6368;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="r1">
+          <mxGeometry x="650" y="800" width="440" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rE1" value="invokes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#F9AB00;fontSize=11;fontColor=#B06000;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="r1" source="rSched" target="rJobPredict">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="rE1L" value="OAuth POST  jobs:run&#10;sa-firmaware-scheduler holds run.invoker&#10;on the predict job only" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=11;fontColor=#B06000;labelBackgroundColor=#FFFFFF;" vertex="1" connectable="0" parent="rE1">
-          <mxGeometry x="-0.35" relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry>
-        </mxCell>
-
-        <mxCell id="rE2" value="image digest" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#A142F4;fontSize=11;fontColor=#6A1B9A;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=0;exitY=0.5;entryX=1;entryY=0.2;verticalAlign=bottom;" edge="1" parent="r1" source="rReg" target="rJobs">
+        <mxCell id="rE2" value="image digest" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#A142F4;fontSize=11;fontColor=#6A1B9A;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=0;exitY=1;entryX=0.95;entryY=0;" edge="1" parent="r1" source="rReg" target="rJobs">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
         <mxCell id="rE3" value="upload" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#5F6368;fontSize=11;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="r1" source="rSrc" target="rBData">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
         <mxCell id="rE4" value="read" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#34A853;fontSize=11;fontColor=#0D652D;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="r1" source="rJobValidate" target="rBData">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="rE5" value="write model + champion.json" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#34A853;fontSize=11;fontColor=#0D652D;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="r1" source="rJobTrain" target="rBArt">
+        <mxCell id="rE5" value="model + champion.json" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#34A853;fontSize=11;fontColor=#0D652D;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="r1" source="rJobTrain" target="rBArt">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="rE6" value="append one immutable&#10;score object per run" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#34A853;fontSize=11;fontColor=#0D652D;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="r1" source="rJobPredict" target="rBScores">
+        <mxCell id="rE6" value="one score object per run" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#34A853;fontSize=11;fontColor=#0D652D;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="r1" source="rJobPredict" target="rBScores">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
-        <mxCell id="rE7" value="read-only&#10;newest scores + champion threshold" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#5F6368;fontSize=11;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=0.5;exitY=0;entryX=0.83;entryY=1;" edge="1" parent="r1" source="rApp" target="rStore">
+        <mxCell id="rE7" value="read-only" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#5F6368;fontSize=11;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=0.5;exitY=0;entryX=0.7;entryY=1;" edge="1" parent="r1" source="rApp" target="rStore">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
-        <mxCell id="rE8" value="logs ·&#10;exit codes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#EA4335;fontSize=11;fontColor=#B31412;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.236;" edge="1" parent="r1" source="rJobs" target="rObs">
+        <mxCell id="rE8" value="logs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#EA4335;fontSize=11;fontColor=#B31412;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.222;" edge="1" parent="r1" source="rJobs" target="rObs">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-
         <mxCell id="rE9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#EA4335;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="r1" source="rLog" target="rAlert">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
@@ -119,110 +107,101 @@
   </diagram>
 
   <diagram id="firmaware-cicd" name="2 · CI/CD and progressive delivery">
-    <mxGraphModel dx="1600" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1150" math="0" shadow="0">
+    <mxGraphModel dx="1500" dy="930" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="930" math="0" shadow="0">
       <root>
         <mxCell id="c0" />
         <mxCell id="c1" parent="c0" />
 
-        <mxCell id="cTitle" value="FirmAware — CI/CD and progressive delivery to GCP" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#202124;" vertex="1" parent="c1">
-          <mxGeometry x="40" y="18" width="1000" height="32" as="geometry" />
+        <mxCell id="cTitle" value="FirmAware — CI/CD and progressive delivery" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#202124;" vertex="1" parent="c1">
+          <mxGeometry x="40" y="20" width="1000" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="cSub" value="Keyless GitHub → GCP auth, then a candidate is proven against real data before the nightly schedule is allowed to resume" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#5F6368;" vertex="1" parent="c1">
-          <mxGeometry x="40" y="50" width="1200" height="22" as="geometry" />
-        </mxCell>
-
-        <mxCell id="cGh" value="GitHub — PMK1991/FirmAware" style="rounded=1;html=1;fillColor=#F1F3F4;strokeColor=#5F6368;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=14;spacingTop=6;fontSize=13;fontStyle=1;fontColor=#202124;" vertex="1" parent="c1">
-          <mxGeometry x="40" y="100" width="400" height="440" as="geometry" />
-        </mxCell>
-        <mxCell id="cPush" value="&lt;b&gt;Pull request / push to main&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5F6368;fontSize=12;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="60" y="145" width="360" height="50" as="geometry" />
-        </mxCell>
-        <mxCell id="cCi" value="&lt;b&gt;CI workflow&lt;/b&gt; — ci.yaml&lt;br&gt;python: ruff check src tests · pytest&lt;br&gt;container: docker build&lt;br&gt;terraform: fmt · validate · tflint&lt;br&gt;&lt;i&gt;all dependencies pinned exactly&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5F6368;fontSize=12;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="60" y="225" width="360" height="130" as="geometry" />
-        </mxCell>
-        <mxCell id="cCd" value="&lt;b&gt;Deploy dev workflow&lt;/b&gt; — deploy-dev.yaml&lt;br&gt;trigger: workflow_run after CI succeeds on main&lt;br&gt;environment: development&lt;br&gt;concurrency group firmaware-dev" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5F6368;fontSize=12;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="60" y="385" width="360" height="130" as="geometry" />
+        <mxCell id="cSub" value="Keyless GitHub → GCP auth, then a candidate is proven against real data before the nightly schedule resumes" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#5F6368;" vertex="1" parent="c1">
+          <mxGeometry x="40" y="50" width="1200" height="20" as="geometry" />
         </mxCell>
 
-        <mxCell id="cWif" value="&lt;b&gt;Workload Identity Federation&lt;/b&gt;&lt;br&gt;issuer token.actions.githubusercontent.com&lt;br&gt;&lt;br&gt;attribute condition (dev):&lt;br&gt;repository == PMK1991/FirmAware&lt;br&gt;&amp;amp;&amp;amp; environment == development&lt;br&gt;&amp;amp;&amp;amp; ref == refs/heads/main" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;fontSize=12;fontColor=#174EA6;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="500" y="180" width="380" height="175" as="geometry" />
+        <mxCell id="cGh" value="GitHub — PMK1991/FirmAware" style="rounded=1;html=1;fillColor=#F1F3F4;strokeColor=#202124;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=14;spacingTop=6;fontSize=13;fontStyle=1;fontColor=#202124;" vertex="1" parent="c1">
+          <mxGeometry x="40" y="95" width="380" height="340" as="geometry" />
         </mxCell>
-        <mxCell id="cSa" value="&lt;b&gt;sa-firmaware-deployer&lt;/b&gt;&lt;br&gt;keyless — no JSON key ever issued&lt;br&gt;&lt;br&gt;run.admin · storage.admin · artifactregistry.admin&lt;br&gt;cloudscheduler.admin · iam + monitoring + logging" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;fontSize=12;fontColor=#174EA6;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="500" y="400" width="380" height="140" as="geometry" />
+        <mxCell id="cPush" value="&lt;b&gt;Pull request / push to main&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5F6368;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="60" y="135" width="340" height="45" as="geometry" />
         </mxCell>
-        <mxCell id="cState" value="&lt;b&gt;Terraform backend&lt;/b&gt;&lt;br&gt;gs://firmaware-558685262335-tf-state&lt;br&gt;prefix firmaware/dev" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9AA0A6;dashed=1;fontSize=12;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="500" y="590" width="380" height="90" as="geometry" />
+        <mxCell id="cCi" value="&lt;b&gt;CI workflow&lt;/b&gt; — ci.yaml&lt;br&gt;&lt;br&gt;ruff · pytest · docker build&lt;br&gt;terraform fmt · validate · tflint" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5F6368;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="60" y="210" width="340" height="95" as="geometry" />
         </mxCell>
-        <mxCell id="cProd" value="&lt;b&gt;Production path — not yet provisioned&lt;/b&gt;&lt;br&gt;deploy-prod.yaml · environment production&lt;br&gt;WIF condition requires ref refs/tags/v*&lt;br&gt;deletion_protection on jobs, PREVENT on buckets" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9AA0A6;dashed=1;fontSize=12;fontColor=#5F6368;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="500" y="720" width="380" height="120" as="geometry" />
+        <mxCell id="cCd" value="&lt;b&gt;Deploy dev workflow&lt;/b&gt;&lt;br&gt;deploy-dev.yaml · after CI passes on main" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5F6368;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="60" y="340" width="340" height="75" as="geometry" />
         </mxCell>
 
-        <mxCell id="cNotes" value="&lt;b&gt;What this pipeline guarantees&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; The deploy workflow refuses to run against anything but the exact commit CI already verified on main.&lt;br&gt;&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; No long-lived credential exists. Workload Identity Federation mints a short-lived token per run and no service-account JSON key is ever issued.&lt;br&gt;&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; Jobs reference an image &lt;i&gt;digest&lt;/i&gt;, and the registry uses immutable tags, so a re-tag cannot silently change what runs.&lt;br&gt;&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; The nightly scheduler is paused for the whole deploy window, so a half-applied candidate can never be invoked.&lt;br&gt;&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; A candidate is proven against real deployment data before it is activated, not just built.&lt;br&gt;&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; Rollback restores the previous digest and &lt;i&gt;then&lt;/i&gt; fails the workflow, so a bad deploy is never reported green.&lt;br&gt;&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; Production promotes the same digest that passed dev. It is never rebuilt." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8F9FA;strokeColor=#DADCE0;fontSize=11;fontColor=#3C4043;verticalAlign=top;align=left;spacingLeft=12;spacingRight=12;spacingTop=8;" vertex="1" parent="c1">
-          <mxGeometry x="40" y="580" width="400" height="330" as="geometry" />
+        <mxCell id="cNotes" value="&lt;b&gt;Why this is safe&lt;/b&gt;&lt;br&gt;&lt;br&gt;· Deploys only the exact commit CI verified on main.&lt;br&gt;· No stored credential — WIF mints a short-lived token.&lt;br&gt;· Jobs run an immutable digest, never a tag.&lt;br&gt;· The scheduler stays paused until the candidate passes.&lt;br&gt;· Rollback restores the previous digest, then fails." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8F9FA;strokeColor=#DADCE0;fontSize=11;fontColor=#3C4043;verticalAlign=top;align=left;spacingLeft=12;spacingRight=12;spacingTop=10;" vertex="1" parent="c1">
+          <mxGeometry x="40" y="480" width="380" height="150" as="geometry" />
         </mxCell>
-        <mxCell id="cFiles" value="&lt;b&gt;Where this lives in the repo&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; .github/workflows/ci.yaml&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; .github/workflows/deploy-dev.yaml&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; deploy/build.sh · deploy/smoke_test.sh · deploy/rollback_image.sh&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; infra/ — root module plus modules/foundation, storage, iam, jobs&lt;br&gt;&lt;b&gt;·&lt;/b&gt;&amp;nbsp; infra/envs/dev.tfvars — the dev variable values" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8F9FA;strokeColor=#DADCE0;fontSize=11;fontColor=#3C4043;verticalAlign=top;align=left;spacingLeft=12;spacingRight=12;spacingTop=8;" vertex="1" parent="c1">
-          <mxGeometry x="40" y="930" width="400" height="180" as="geometry" />
+
+        <mxCell id="cWif" value="&lt;b&gt;Workload Identity Federation&lt;/b&gt;&lt;br&gt;token.actions.githubusercontent.com&lt;br&gt;&lt;br&gt;repo == PMK1991/FirmAware&lt;br&gt;env == development · ref == main" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;fontSize=11;fontColor=#174EA6;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="470" y="150" width="340" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="cSa" value="&lt;b&gt;sa-firmaware-deployer&lt;/b&gt;&lt;br&gt;keyless — no JSON key issued&lt;br&gt;&lt;br&gt;run · storage · artifactregistry&lt;br&gt;cloudscheduler · iam · monitoring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;fontSize=11;fontColor=#174EA6;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="470" y="330" width="340" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cState" value="&lt;b&gt;Terraform backend&lt;/b&gt;&lt;br&gt;gs://firmaware-…-tf-state · firmaware/dev" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9AA0A6;dashed=1;fontSize=11;fontColor=#3C4043;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="470" y="495" width="340" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="cProd" value="&lt;b&gt;Production path&lt;/b&gt; — not provisioned&lt;br&gt;&lt;br&gt;deploy-prod.yaml · ref refs/tags/v*&lt;br&gt;deletion_protection · PREVENT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9AA0A6;dashed=1;fontSize=11;fontColor=#5F6368;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="470" y="660" width="340" height="95" as="geometry" />
         </mxCell>
 
         <mxCell id="cSeq" value="Deployment sequence — every step runs against the deploy SHA" style="rounded=1;html=1;fillColor=none;strokeColor=#4285F4;strokeWidth=2;dashed=1;dashPattern=8 6;verticalAlign=top;align=left;spacingLeft=14;spacingTop=6;fontSize=13;fontStyle=1;fontColor=#174EA6;" vertex="1" parent="c1">
-          <mxGeometry x="940" y="100" width="620" height="1010" as="geometry" />
+          <mxGeometry x="860" y="95" width="600" height="790" as="geometry" />
         </mxCell>
-
-        <mxCell id="cS1" value="&lt;b&gt;1 · Guard&lt;/b&gt;  refuse a stale or non-main SHA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF7E0;strokeColor=#F9AB00;fontSize=12;fontColor=#B06000;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="965" y="145" width="570" height="52" as="geometry" />
+        <mxCell id="cS1" value="&lt;b&gt;1 · Guard&lt;/b&gt;  refuse a stale or non-main SHA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF7E0;strokeColor=#F9AB00;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="885" y="140" width="550" height="42" as="geometry" />
         </mxCell>
-        <mxCell id="cS2" value="&lt;b&gt;2 · Re-run&lt;/b&gt;  ruff + pytest at that exact SHA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5F6368;fontSize=12;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="965" y="217" width="570" height="52" as="geometry" />
+        <mxCell id="cS2" value="&lt;b&gt;2 · Re-run&lt;/b&gt;  ruff + pytest at that SHA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5F6368;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="885" y="200" width="550" height="42" as="geometry" />
         </mxCell>
-        <mxCell id="cS3" value="&lt;b&gt;3 · Re-check infrastructure&lt;/b&gt;  terraform fmt · validate · tflint" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5F6368;fontSize=12;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="965" y="289" width="570" height="52" as="geometry" />
+        <mxCell id="cS3" value="&lt;b&gt;3 · Re-check infra&lt;/b&gt;  terraform fmt · validate · tflint" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5F6368;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="885" y="260" width="550" height="42" as="geometry" />
         </mxCell>
-        <mxCell id="cS4" value="&lt;b&gt;4 · Build&lt;/b&gt;  deploy/build.sh → push image, resolve to a digest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FD;strokeColor=#A142F4;fontSize=12;fontColor=#6A1B9A;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="965" y="361" width="570" height="52" as="geometry" />
+        <mxCell id="cS4" value="&lt;b&gt;4 · Build&lt;/b&gt;  push the image, resolve to a digest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FD;strokeColor=#A142F4;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="885" y="320" width="550" height="42" as="geometry" />
         </mxCell>
-        <mxCell id="cS5" value="&lt;b&gt;5 · Pause&lt;/b&gt;  the nightly scheduler before anything changes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF7E0;strokeColor=#F9AB00;fontSize=12;fontColor=#B06000;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="965" y="433" width="570" height="52" as="geometry" />
+        <mxCell id="cS5" value="&lt;b&gt;5 · Pause&lt;/b&gt;  the nightly scheduler" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF7E0;strokeColor=#F9AB00;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="885" y="380" width="550" height="42" as="geometry" />
         </mxCell>
-        <mxCell id="cS6" value="&lt;b&gt;6 · Apply candidate&lt;/b&gt;  terraform apply with scheduler_enabled = false&lt;br&gt;plan uploaded as a 30-day workflow artifact" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;fontSize=12;fontColor=#174EA6;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="965" y="505" width="570" height="62" as="geometry" />
+        <mxCell id="cS6" value="&lt;b&gt;6 · Apply candidate&lt;/b&gt;  terraform apply, scheduler_enabled = false" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="885" y="440" width="550" height="42" as="geometry" />
         </mxCell>
-        <mxCell id="cS7" value="&lt;b&gt;7 · Validate&lt;/b&gt;  run the validate job against real deployment data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;fontSize=12;fontColor=#174EA6;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="965" y="587" width="570" height="52" as="geometry" />
+        <mxCell id="cS7" value="&lt;b&gt;7 · Validate&lt;/b&gt;  run the validate job on real data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="885" y="500" width="550" height="42" as="geometry" />
         </mxCell>
-        <mxCell id="cS8" value="&lt;b&gt;8 · Smoke test&lt;/b&gt;  score the 5-row fixture end to end" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;fontSize=12;fontColor=#174EA6;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="965" y="659" width="570" height="52" as="geometry" />
+        <mxCell id="cS8" value="&lt;b&gt;8 · Smoke test&lt;/b&gt;  score the 5-row fixture end to end" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0FE;strokeColor=#4285F4;fontSize=12;fontColor=#202124;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="885" y="560" width="550" height="42" as="geometry" />
         </mxCell>
-
         <mxCell id="cGate" value="&lt;b&gt;Both passed?&lt;/b&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#202124;fontSize=12;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="1160" y="735" width="180" height="80" as="geometry" />
+          <mxGeometry x="1075" y="640" width="170" height="70" as="geometry" />
         </mxCell>
-
-        <mxCell id="cFail" value="&lt;b&gt;Roll back&lt;/b&gt;&lt;br&gt;deploy/rollback_image.sh restores&lt;br&gt;the previous image digest,&lt;br&gt;then the workflow fails" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE8E6;strokeColor=#EA4335;fontSize=12;fontColor=#B31412;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="965" y="860" width="265" height="110" as="geometry" />
+        <mxCell id="cFail" value="&lt;b&gt;Roll back&lt;/b&gt;&lt;br&gt;&lt;br&gt;restore the previous digest,&lt;br&gt;then fail the workflow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE8E6;strokeColor=#EA4335;fontSize=11;fontColor=#B31412;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="885" y="750" width="260" height="105" as="geometry" />
         </mxCell>
-        <mxCell id="cPass" value="&lt;b&gt;Activate&lt;/b&gt;&lt;br&gt;terraform apply with&lt;br&gt;scheduler_enabled = true&lt;br&gt;nightly schedule resumes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;strokeColor=#34A853;fontSize=12;fontColor=#0D652D;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="1270" y="860" width="265" height="110" as="geometry" />
-        </mxCell>
-        <mxCell id="cLive" value="&lt;b&gt;Record identity&lt;/b&gt;  deployments/live.json&lt;br&gt;image digest · git SHA · champion run id · timestamp" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;strokeColor=#34A853;fontSize=12;fontColor=#0D652D;verticalAlign=middle;" vertex="1" parent="c1">
-          <mxGeometry x="1270" y="1000" width="265" height="85" as="geometry" />
+        <mxCell id="cPass" value="&lt;b&gt;Activate&lt;/b&gt;&lt;br&gt;&lt;br&gt;scheduler_enabled = true&lt;br&gt;nightly schedule resumes&lt;br&gt;write deployments/live.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F4EA;strokeColor=#34A853;fontSize=11;fontColor=#0D652D;verticalAlign=middle;" vertex="1" parent="c1">
+          <mxGeometry x="1175" y="750" width="260" height="105" as="geometry" />
         </mxCell>
 
         <mxCell id="cE1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#5F6368;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="c1" source="cPush" target="cCi">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="cE2" value="on success (main only)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#5F6368;fontSize=11;labelBackgroundColor=#F1F3F4;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="c1" source="cCi" target="cCd">
+        <mxCell id="cE2" value="on success (main)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#5F6368;fontSize=11;labelBackgroundColor=#F1F3F4;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="c1" source="cCi" target="cCd">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="cE3" value="OIDC token" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#4285F4;fontSize=11;fontColor=#174EA6;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=1;exitY=0.4;entryX=0;entryY=0.5;" edge="1" parent="c1" source="cCd" target="cWif">
+        <mxCell id="cE3" value="OIDC" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#4285F4;fontSize=11;fontColor=#174EA6;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=1;exitY=0.4;entryX=0;entryY=0.5;" edge="1" parent="c1" source="cCd" target="cWif">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="cE4" value="impersonate" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#4285F4;fontSize=11;fontColor=#174EA6;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="c1" source="cWif" target="cSa">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="cE5" value="reads / writes state" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#9AA0A6;fontSize=11;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;dashed=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="c1" source="cSa" target="cState">
+        <mxCell id="cE5" value="state" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#9AA0A6;fontSize=11;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;dashed=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="c1" source="cSa" target="cState">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="cE6" value="runs the sequence" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#4285F4;fontSize=11;fontColor=#174EA6;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=1;exitY=0.3;entryX=0;entryY=0.07;" edge="1" parent="c1" source="cSa" target="cSeq">
+        <mxCell id="cE6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#4285F4;endArrow=blockThin;endFill=1;exitX=1;exitY=0.3;entryX=0;entryY=0.057;" edge="1" parent="c1" source="cSa" target="cSeq">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 
@@ -236,7 +215,6 @@
         <mxCell id="cQ8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#5F6368;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="c1" source="cS8" target="cGate"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="cQ9" value="no" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#EA4335;fontSize=11;fontColor=#B31412;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=0;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="c1" source="cGate" target="cFail"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="cQ10" value="yes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#34A853;fontSize=11;fontColor=#0D652D;labelBackgroundColor=#FFFFFF;endArrow=blockThin;endFill=1;exitX=1;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="c1" source="cGate" target="cPass"><mxGeometry relative="1" as="geometry" /></mxCell>
-        <mxCell id="cQ11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;strokeColor=#34A853;endArrow=blockThin;endFill=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="c1" source="cPass" target="cLive"><mxGeometry relative="1" as="geometry" /></mxCell>
 
       </root>
     </mxGraphModel>
