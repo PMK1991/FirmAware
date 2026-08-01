@@ -365,6 +365,16 @@ The MLflow model accepts the same 27 columns as
 encoding, scaling, OOD reporting, probability scoring, and decision generation
 are included in one PyFunc package.
 
+Numeric columns are nullable, so the serving signature types every one of them
+as `double`. MLflow enforces that signature before the model runs and will not
+cast `int64` to `double`, so send numerics as floats: a frame built from whole
+numbers types them `int64` on Linux, which is rejected. The batch `predict`
+path is unaffected because it validates and casts internally.
+
+```python
+frame = frame.astype({column: "float64" for column in NUMERIC_COLUMNS})
+```
+
 ```powershell
 $version = "<registered-version>"
 mlflow models serve -m "models:/FirmAwareRiskModel/$version" -p 5001 --env-manager local
@@ -439,6 +449,27 @@ filters, a fleet-average gauge, and band, decision, and tier distributions.
 **Deployment Inspector** shows one deployment's GO/NO_GO stamp, probability
 gauge, equipment attributes, and risk flags.
 
+![Fleet Overview](docs/images/fleet-overview.png)
+
+*Fleet Overview — the whole scored run at once: headline counts, band/decision/vendor
+filters, the register, and distributions. The gauge shows fleet average risk against the
+same threshold marker used per deployment.*
+
+![Deployment Inspector](docs/images/deployment-inspector.png)
+
+*Deployment Inspector — one deployment in full. The stamp carries the GO/NO_GO decision
+and risk band, the gauge places its failure probability against the threshold, and the
+flag panel reports how many of the nine risk conditions are raised.*
+
+Both screenshots are of the live GCP environment: `xgboost` champion run
+`2026-07-31T16:19:30`, threshold `0.1800`, scoring the run the nightly Cloud
+Scheduler job produced unattended at `2026-08-01T02:02:02`.
+
+The flag panel always states its count as `N of 9 raised`. Roughly a third of
+deployments legitimately raise nothing, and those rows cluster early in the
+identifier order, so an all-clear panel is labeled as a result rather than left
+looking like a failed render.
+
 The page imports `firmaware.schema`, `firmaware.features`, and `firmaware.io`
 rather than restating them, and it reads the decision threshold from the
 champion's `metadata.json`. Gauge zones are therefore derived from the live
@@ -474,7 +505,7 @@ python -m pytest -q
 Verified output on 2026-08-01:
 
 ```text
-32 passed in 49.06s
+33 passed in 47.59s
 ```
 
 The suite covers the data contract, label behavior, signed version features,

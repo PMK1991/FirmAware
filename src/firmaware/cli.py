@@ -9,8 +9,8 @@ from pathlib import Path
 import mlflow
 import pandas as pd
 
-from .predict import predict
 from .io import join_uri, read_csv
+from .predict import predict
 from .schema import ContractViolation, validate
 from .train import train
 

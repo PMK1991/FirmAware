@@ -11,7 +11,6 @@ import firmaware.train as train_module
 from firmaware.features import derive_features, model_inputs
 from firmaware.schema import validate
 from firmaware.transform import Preprocessor
-
 from tests.test_schema import make_training_frame
 
 

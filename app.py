@@ -371,13 +371,13 @@ def render_gauge(value_0_to_1: float, label: str, threshold: float) -> go.Figure
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=20, r=20, t=10, b=0),
-        height=190,
+        margin=dict(l=20, r=20, t=10, b=38),
+        height=225,
         annotations=[
             dict(
                 text=label,
                 x=0.5,
-                y=-0.12,
+                y=-0.08,
                 showarrow=False,
                 font=dict(family="Inter", size=12, color=INK_MUTED),
             )
@@ -656,7 +656,7 @@ else:
     with col_stamp:
         st.markdown(
             f"""
-        <div class="fa-panel" style="display:flex; flex-direction:column; justify-content:center; align-items:flex-start; height:190px;">
+        <div class="fa-panel" style="display:flex; flex-direction:column; justify-content:center; align-items:flex-start; height:225px;">
             <div class="fa-panel-label">{selected_id}</div>
             <div class="fa-stamp-eyebrow">ML Signal — prediction only, not a final decision</div>
             <div class="fa-stamp" style="--stamp-color:{stamp_color};">{str(pred).replace('_', ' ')}</div>
@@ -761,8 +761,17 @@ else:
                 unsafe_allow_html=True,
             )
 
-    st.markdown('<div class="fa-section">Risk Flag Panel</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="fa-section">Risk Flag Panel'
+        f' — {len(flags)} of {len(FLAG_LABELS)} raised</div>',
+        unsafe_allow_html=True,
+    )
     st.markdown(render_switch_grid(flags), unsafe_allow_html=True)
+    if not flags:
+        st.caption(
+            f"No risk flags raised for {selected_id}. Every switch above is "
+            "genuinely off — this deployment tripped none of the conditions."
+        )
     st.caption(
         "Model-derived features: "
         + ", ".join(MODEL_FLAG_LABELS.values())

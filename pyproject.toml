@@ -10,6 +10,10 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "pandas==2.2.3",
+  # Pinned with the rest of the numerical stack: left transitive it resolved to
+  # numpy 2.x in CI and in the container while training ran on 1.26, and numpy 2
+  # tightened can_cast so MLflow rejects int64 input against a double signature.
+  "numpy==1.26.4",
   "scikit-learn==1.6.1",
   "xgboost==3.0.5",
   "PyYAML==6.0.2",
@@ -24,7 +28,10 @@ app = [
 ]
 dev = [
   "pytest>=8.0,<9",
-  "ruff>=0.9,<1",
+  # Pinned exactly: ruff has no config here, so its default rule set decides what
+  # CI enforces. A range let CI resolve a newer ruff than local and fail on rules
+  # local never ran. Bump deliberately, with the resulting fixes in the same change.
+  "ruff==0.16.1",
 ]
 notebooks = [
   "ipykernel>=6.29,<7",

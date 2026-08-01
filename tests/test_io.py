@@ -11,8 +11,8 @@ import joblib
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-from firmaware.features import LABEL_COLUMN, derive_features, model_inputs
 from firmaware.cli import main
+from firmaware.features import LABEL_COLUMN, derive_features, model_inputs
 from firmaware.io import (
     join_uri,
     latest_scores_uri,
@@ -23,14 +23,13 @@ from firmaware.io import (
     write_scores,
 )
 from firmaware.predict import predict
-from firmaware.schema import ContractViolation
-from firmaware.schema import validate
+from firmaware.schema import ContractViolation, validate
 from firmaware.transform import Preprocessor
 from tests.test_schema import make_training_frame
 
 
 class FakeBlob:
-    def __init__(self, bucket: "FakeBucket", name: str) -> None:
+    def __init__(self, bucket: FakeBucket, name: str) -> None:
         self.bucket = bucket
         self.name = name
 
@@ -188,11 +187,10 @@ class IoTests(unittest.TestCase):
             bucket.objects["model/runs/run-1/metadata.json"]["payload"] = b"{}"
             with self.assertRaisesRegex(
                 ContractViolation, "digest mismatch"
+            ), materialize_artifacts(
+                "gs://artifacts/model", client=client
             ):
-                with materialize_artifacts(
-                    "gs://artifacts/model", client=client
-                ):
-                    pass
+                pass
 
     def test_gcs_scores_create_one_object_per_run(self) -> None:
         client = FakeStorageClient()

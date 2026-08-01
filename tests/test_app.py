@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,10 +29,67 @@ SCORING_ONLY_COLUMNS = [
     "rollback_required",
 ]
 
+SWITCH_PATTERN = re.compile(
+    r'class="(fa-switch(?: active)?)"><span class="fa-switch-label">([^<]+)<'
+)
+
+# Restated from the page's contract so the assertion is independent of app.py.
+FLAG_RULES = {
+    "Major Version Change": lambda r: r["major_version_changed"] > 0,
+    "Core System Touched": lambda r: r["kernel_touched"] or r["bootloader_touched"],
+    "Emergency / No Window": lambda r: (
+        r["deployment_type"] == "EMERGENCY" and not r["maintenance_window"]
+    ),
+    "High CVSS (>= 7.0)": lambda r: r["max_cvss_score"] >= 7.0,
+    "Protocol Mismatch": lambda r: r["protocol_mismatch_flag"] != 0,
+    "High Network Stress (>= 0.70)": lambda r: r["network_stress_score"] >= 0.70,
+    "Repeat Failure Device": lambda r: r["past_failure_count"] >= 1,
+    "Tier 1 Device": lambda r: r["fleet_tier"] == "TIER_1",
+    "High Criticality Site": lambda r: r["site_criticality"] == "HIGH",
+}
+
+CLEAR_ROW = {
+    "current_firmware": "2.2.0",
+    "target_firmware": "2.3.1",
+    "kernel_touched": 0,
+    "bootloader_touched": 0,
+    "deployment_type": "STANDARD",
+    "maintenance_window": 1,
+    "max_cvss_score": 3.0,
+    "protocol_mismatch_flag": 0,
+    "network_stress_score": 0.10,
+    "past_failure_count": 0,
+    "fleet_tier": "TIER_3",
+    "site_criticality": "LOW",
+}
+
+RAISED_ROW = {
+    "current_firmware": "2.2.0",
+    "target_firmware": "5.0.1",
+    "kernel_touched": 1,
+    "bootloader_touched": 1,
+    "deployment_type": "EMERGENCY",
+    "maintenance_window": 0,
+    "max_cvss_score": 9.6,
+    "protocol_mismatch_flag": 1,
+    "network_stress_score": 0.95,
+    "past_failure_count": 3,
+    "fleet_tier": "TIER_1",
+    "site_criticality": "HIGH",
+}
+
 
 def build_fixture(directory: Path, threshold: float = 0.4) -> dict[str, str]:
     """Write the minimum score/artifact/input trio the page reads."""
     upcoming = make_training_frame(12).drop(columns=SCORING_ONLY_COLUMNS)
+
+    # Pin one all-clear and one all-raised row so the flag panel is exercised at
+    # both extremes regardless of how the synthetic generator evolves.
+    for column, value in CLEAR_ROW.items():
+        upcoming.loc[0, column] = value
+    for column, value in RAISED_ROW.items():
+        upcoming.loc[1, column] = value
+
     upcoming_path = directory / "upcoming_deployments.csv"
     upcoming.to_csv(upcoming_path, index=False)
 
@@ -77,7 +135,7 @@ def build_fixture(directory: Path, threshold: float = 0.4) -> dict[str, str]:
 
 @unittest.skipIf(AppTest is None, "streamlit is not installed")
 class AppTests(unittest.TestCase):
-    def start(self, environment: dict[str, str]) -> "AppTest":
+    def start(self, environment: dict[str, str]) -> AppTest:
         """Keep the environment patched for the whole test.
 
         Every AppTest interaction re-executes the script, and the page reads its
@@ -87,7 +145,7 @@ class AppTests(unittest.TestCase):
         return AppTest.from_file(str(APP), default_timeout=180).run()
 
     @staticmethod
-    def picker(page: "AppTest", label: str):
+    def picker(page: AppTest, label: str):
         """Select widgets by label; index shifts once the run selector appears."""
         return next(widget for widget in page.selectbox if widget.label == label)
 
@@ -184,6 +242,63 @@ class AppTests(unittest.TestCase):
             ).run()
             self.assertEqual(page.exception, [])
             self.assertEqual(len(page.dataframe[0].value), 12)
+
+    def test_risk_flag_panel_matches_the_underlying_deployment_data(self) -> None:
+        """A panel with every switch off must mean no flags, not a failed render."""
+        with tempfile.TemporaryDirectory() as directory:
+            environment = build_fixture(Path(directory))
+            page = self.start(environment)
+            page.radio[0].set_value("Deployment Inspector").run()
+
+            upcoming = pd.read_csv(
+                Path(environment["FIRMAWARE_DATA_URI"]) / "upcoming_deployments.csv"
+            )
+            derived = derive_features(
+                validate(upcoming, "scoring"), "scoring"
+            ).reset_index()
+            context = upcoming.merge(
+                derived[["deployment_id", "major_version_changed"]],
+                on="deployment_id",
+                how="left",
+            )
+
+            seen_all_raised = False
+            seen_all_clear = False
+            for record in context.to_dict("records"):
+                deployment = record["deployment_id"]
+                expected = sorted(
+                    label for label, rule in FLAG_RULES.items() if rule(record)
+                )
+                self.picker(page, "Select a deployment").set_value(deployment).run()
+                self.assertEqual(page.exception, [])
+
+                grid = next(
+                    str(block.value)
+                    for block in page.markdown
+                    if 'class="fa-switch-grid"' in str(block.value)
+                )
+                switches = SWITCH_PATTERN.findall(grid)
+                shown = sorted(
+                    label for css, label in switches if "active" in css
+                )
+
+                self.assertEqual(len(switches), len(FLAG_RULES), deployment)
+                self.assertEqual(shown, expected, deployment)
+
+                headers = " ".join(
+                    str(block.value)
+                    for block in page.markdown
+                    if "Risk Flag Panel" in str(block.value)
+                )
+                self.assertIn(
+                    f"{len(expected)} of {len(FLAG_RULES)} raised", headers
+                )
+
+                seen_all_raised = seen_all_raised or len(expected) == len(FLAG_RULES)
+                seen_all_clear = seen_all_clear or not expected
+
+            self.assertTrue(seen_all_raised, "fixture never raises every flag")
+            self.assertTrue(seen_all_clear, "fixture never leaves the panel clear")
 
     def test_page_never_writes_to_the_pipeline_locations(self) -> None:
         """The page is read-only, so rendering must not create or mutate files."""

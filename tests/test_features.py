@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from firmaware.features import LABEL_COLUMN, derive_features, deployment_risk
+from firmaware.features import LABEL_COLUMN, deployment_risk, derive_features
 from firmaware.schema import ContractViolation, validate
-
 from tests.test_schema import make_training_frame
 
 

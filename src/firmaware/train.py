@@ -7,7 +7,7 @@ import json
 import shutil
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -742,7 +742,7 @@ def _train_impl(
     train_side, test_side, cutoff = split_by_time(featured, config)
     tuning_folds = _prepare_tuning_folds(train_side, config)
 
-    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     run_name = tracking["run_name"] or f"firmaware-{timestamp}"
     target_output_dir = Path(artifacts_dir)
     target_output_dir.parent.mkdir(parents=True, exist_ok=True)

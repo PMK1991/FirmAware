@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import joblib
 import pandas as pd
 
-from .model import SCORE_COLUMNS, score_dataframe
 from .io import materialize_artifacts, read_csv, write_scores
+from .model import SCORE_COLUMNS, score_dataframe
 from .schema import ContractViolation
 from .train import SPEC_VERSION
 from .transform import Preprocessor
@@ -51,7 +51,7 @@ def predict(
         model, preprocessor, metadata = _load_artifacts(local_artifacts)
         raw = read_csv(input_path)
         scores = score_dataframe(raw, model, preprocessor, metadata)
-        scored_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        scored_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         scores["scored_at"] = scored_at
         scores = scores[OUTPUT_COLUMNS]
         run_id = str(
