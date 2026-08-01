@@ -253,6 +253,31 @@ The provider boundary is MLflow plus environment variables. Training logic does
 not import Azure or GCP SDKs, so the same container and command can move between
 platforms.
 
+### Deployed GCP architecture
+
+The table above is the portable design. The diagrams below are the concrete
+deployment that is live in GCP project `firmaware` (`us-central1`, `dev`), drawn
+from the Terraform in `infra/` and the workflows in `.github/workflows/`.
+
+The editable source is
+[`docs/architecture/firmaware-gcp-architecture.drawio`](docs/architecture/firmaware-gcp-architecture.drawio),
+a two-page diagrams.net file. Open it at [app.diagrams.net](https://app.diagrams.net)
+or in the draw.io desktop app. The PNGs below are exported from it, so regenerate
+them whenever the source changes.
+
+**Page 1 — runtime architecture.** Cloud Scheduler triggers the nightly
+`predict` job; the three Cloud Run Jobs share one runtime service account but
+each bucket grants only the roles that job needs; the Streamlit page sits outside
+GCP and reads scores only.
+
+![GCP runtime architecture](docs/images/gcp-runtime-architecture.png)
+
+**Page 2 — CI/CD and progressive delivery.** GitHub authenticates to GCP without
+a stored key, then a candidate image is applied with the scheduler paused and is
+proven against real data before the nightly schedule is allowed to resume.
+
+![GCP CI/CD architecture](docs/images/gcp-cicd-architecture.png)
+
 ### Reliability, security, and operational controls
 
 - **Determinism:** every candidate and stochastic model uses the configured
@@ -409,7 +434,8 @@ only for `gs://` URIs. Cloud Run Jobs read inputs from GCS, publish immutable
 model runs plus `champion.json`, and create one new score object per execution.
 The Cloud deployment intentionally has no MLflow server: GCS metadata is its
 system of record, while the local SQLite MLflow store remains available for
-development. See [`infra/README.md`](infra/README.md).
+development. See [`infra/README.md`](infra/README.md) and the
+[deployed GCP architecture diagrams](#deployed-gcp-architecture).
 
 When tracking through a remote HTTP or managed endpoint, FirmAware leaves
 artifact routing to the server unless an explicit cloud artifact URI is set.
