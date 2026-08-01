@@ -5,6 +5,30 @@ time-aware hyperparameter tuning, detailed MLflow experiment tracking, model
 registry publication, and a raw-input model package that can be served locally
 or moved to Azure ML and GCP.
 
+**Live demo: [firmaware.streamlit.app](https://firmaware.streamlit.app/)** — the
+read-only page at the end of the pipeline. It renders an already-scored run and
+never trains, scores, or writes anything. The hosted copy reads a committed
+sample run; pointed at the buckets it reads the live one.
+
+![Fleet Overview](docs/images/fleet-overview.png)
+
+*Fleet Overview — the whole scored run at once: headline counts, band, decision,
+and vendor filters, the register, and distributions. The gauge shows fleet average
+risk against the same threshold marker used per deployment.*
+
+![Deployment Inspector](docs/images/deployment-inspector.png)
+
+*Deployment Inspector — one deployment in full. The stamp carries the GO/NO_GO
+decision and risk band, the gauge places its failure probability against the
+threshold, and the flag panel reports how many of the nine risk conditions are
+raised.*
+
+Both screenshots are of the live GCP environment: `xgboost` champion run
+`2026-07-31T16:19:30`, threshold `0.1800`, scoring the run the nightly Cloud
+Scheduler job produced unattended at `2026-08-01T02:02:02`. The rest of this file
+follows the same order the pipeline runs in: what the decision is, how the system
+is designed, how to run it, how it reaches the cloud, and how it is displayed.
+
 The GCP batch deployment, Terraform modules, keyless CI/CD, smoke tests, and
 rollback runbook are documented in [`infra/README.md`](infra/README.md).
 The exploratory-to-deployment notebook workflow is documented in
@@ -475,21 +499,8 @@ filters, a fleet-average gauge, and band, decision, and tier distributions.
 **Deployment Inspector** shows one deployment's GO/NO_GO stamp, probability
 gauge, equipment attributes, and risk flags.
 
-![Fleet Overview](docs/images/fleet-overview.png)
-
-*Fleet Overview — the whole scored run at once: headline counts, band/decision/vendor
-filters, the register, and distributions. The gauge shows fleet average risk against the
-same threshold marker used per deployment.*
-
-![Deployment Inspector](docs/images/deployment-inspector.png)
-
-*Deployment Inspector — one deployment in full. The stamp carries the GO/NO_GO decision
-and risk band, the gauge places its failure probability against the threshold, and the
-flag panel reports how many of the nine risk conditions are raised.*
-
-Both screenshots are of the live GCP environment: `xgboost` champion run
-`2026-07-31T16:19:30`, threshold `0.1800`, scoring the run the nightly Cloud
-Scheduler job produced unattended at `2026-08-01T02:02:02`.
+Both views are pictured at the [top of this file](#firmaware) and running at
+[firmaware.streamlit.app](https://firmaware.streamlit.app/).
 
 The flag panel always states its count as `N of 9 raised`. Roughly a third of
 deployments legitimately raise nothing, and those rows cluster early in the
@@ -507,10 +518,12 @@ deployment.
 
 ### Hosted demo on Streamlit Community Cloud
 
-When nothing is configured and the pipeline has not run in the checkout, the page
-falls back to the fixtures in `demo/`: one scored run, the upcoming batch behind
-it, and the champion's `metadata.json`, 28 KB in total. A bare clone therefore
-renders, which is exactly what Community Cloud serves.
+[firmaware.streamlit.app](https://firmaware.streamlit.app/) serves this page from
+`feature/mlflow-pipeline`. When nothing is configured and the pipeline has not
+run in the checkout, the page falls back to the fixtures in `demo/`: one scored
+run, the upcoming batch behind it, and the champion's `metadata.json`, 28 KB in
+total. A bare clone therefore renders, which is exactly what Community Cloud
+serves.
 
 Deploy from [share.streamlit.io](https://share.streamlit.io):
 
