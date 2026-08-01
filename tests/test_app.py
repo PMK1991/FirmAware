@@ -135,7 +135,7 @@ def build_fixture(directory: Path, threshold: float = 0.4) -> dict[str, str]:
 
 @unittest.skipIf(AppTest is None, "streamlit is not installed")
 class AppTests(unittest.TestCase):
-    def start(self, environment: dict[str, str]) -> "AppTest":
+    def start(self, environment: dict[str, str]) -> AppTest:
         """Keep the environment patched for the whole test.
 
         Every AppTest interaction re-executes the script, and the page reads its
@@ -145,7 +145,7 @@ class AppTests(unittest.TestCase):
         return AppTest.from_file(str(APP), default_timeout=180).run()
 
     @staticmethod
-    def picker(page: "AppTest", label: str):
+    def picker(page: AppTest, label: str):
         """Select widgets by label; index shifts once the run selector appears."""
         return next(widget for widget in page.selectbox if widget.label == label)
 

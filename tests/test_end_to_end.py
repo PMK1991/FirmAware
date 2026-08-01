@@ -11,17 +11,16 @@ import mlflow
 import numpy as np
 import pandas as pd
 import yaml
-from mlflow.tracking import MlflowClient
 from mlflow.store.model_registry.sqlalchemy_store import (
     SqlAlchemyStore as RegistrySqlAlchemyStore,
 )
 from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
+from mlflow.tracking import MlflowClient
 
 from firmaware.features import derive_features
 from firmaware.predict import predict
 from firmaware.schema import ContractViolation, validate
 from firmaware.train import load_config, split_by_time, train
-
 from tests.test_schema import make_training_frame
 
 

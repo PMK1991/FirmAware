@@ -34,7 +34,7 @@ class Preprocessor:
                 f"Preprocessor input is missing required feature columns: {missing}"
             )
 
-    def fit(self, X: pd.DataFrame) -> "Preprocessor":
+    def fit(self, X: pd.DataFrame) -> Preprocessor:
         """Fit every statistic on the training side only to prevent temporal leakage."""
         self._require_columns(X)
 
@@ -131,7 +131,7 @@ class Preprocessor:
         )
 
     @classmethod
-    def load(cls, path: str | Path) -> "Preprocessor":
+    def load(cls, path: str | Path) -> Preprocessor:
         """Load only a fitted FirmAware preprocessor artifact."""
         loaded = joblib.load(Path(path))
         if not isinstance(loaded, cls):
