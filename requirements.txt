@@ -3,7 +3,8 @@
 # already pins every version. Nothing is restated here, because a second copy
 # of the pins is a second thing to forget to bump.
 #
-# Deploy with Python 3.11 or 3.12: numpy 1.26.4 publishes no 3.13+ wheels, and
-# Community Cloud takes the interpreter from its Advanced settings dialog only
-# (runtime.txt and .python-version are ignored).
+# The app extra leaves numpy to a range rather than an exact pin: Community
+# Cloud chooses the interpreter, and an exact 1.26.4 made the deploy try to
+# compile numpy from source on any version it had no wheels for, which is what
+# "Error installing requirements" was. Training still pins it exactly.
 .[app]

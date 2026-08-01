@@ -519,11 +519,11 @@ Deploy from [share.streamlit.io](https://share.streamlit.io):
 | Repository | `PMK1991/FirmAware` |
 | Branch | `main`, or whichever branch you are deploying |
 | Main file path | `app.py` |
-| Python version, under Advanced settings | `3.11` or `3.12` |
 
-`requirements.txt` installs `.[app]` so the deploy resolves the same pins as
-everything else. Choose the interpreter explicitly: `numpy==1.26.4` publishes no
-wheels for 3.13 or newer, and Community Cloud ignores `runtime.txt`.
+`requirements.txt` installs `.[app]`, which carries the page and none of the
+training stack, so the build stays at 402 MB over 55 packages instead of 855 MB
+over 114. It resolves on whatever interpreter Community Cloud offers; the
+install and a full render are verified on Python 3.13 against numpy 2.
 
 The hosted demo reads those committed fixtures rather than the live buckets.
 Community Cloud cannot federate a GCP identity, and issuing a service account key

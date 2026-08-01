@@ -10,10 +10,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "pandas==2.2.3",
-  # Pinned with the rest of the numerical stack: left transitive it resolved to
-  # numpy 2.x in CI and in the container while training ran on 1.26, and numpy 2
-  # tightened can_cast so MLflow rejects int64 input against a double signature.
-  "numpy==1.26.4",
+  # Deliberately a range where every other pin is exact. The page resolves this
+  # on whatever interpreter Community Cloud offers, and 1.26 publishes no wheels
+  # for 3.13+, so pinning it here made the hosted deploy try to compile numpy
+  # from source and fail. Training narrows it back to an exact version below.
+  "numpy>=1.26,<3",
   "PyYAML==6.0.2",
   "google-cloud-storage==3.13.0",
 ]
@@ -24,6 +25,11 @@ dependencies = [
 # deployment, 402 MB over 55 packages against 855 MB over 114, because
 # scikit-learn and xgboost drag in scipy and mlflow drags in a web stack.
 train = [
+  # Pinned with the rest of the numerical stack, and pinned here rather than in
+  # the base because MLflow is what constrains it: numpy 2 tightened can_cast,
+  # so MLflow rejects int64 input against a double signature. Nothing can train
+  # without this extra, so the constraint still holds wherever it matters.
+  "numpy==1.26.4",
   "scikit-learn==1.6.1",
   "xgboost==3.0.5",
   "mlflow==3.14.0",
