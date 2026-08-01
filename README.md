@@ -511,7 +511,7 @@ Deploy from [share.streamlit.io](https://share.streamlit.io):
 | Field | Value |
 | --- | --- |
 | Repository | `PMK1991/FirmAware` |
-| Branch | `main` |
+| Branch | `main`, or whichever branch you are deploying |
 | Main file path | `app.py` |
 | Python version, under Advanced settings | `3.11` or `3.12` |
 
