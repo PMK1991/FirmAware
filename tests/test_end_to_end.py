@@ -19,9 +19,20 @@ from mlflow.tracking import MlflowClient
 
 from firmaware.features import derive_features
 from firmaware.predict import predict
-from firmaware.schema import ContractViolation, validate
+from firmaware.schema import NUMERIC_COLUMNS, ContractViolation, validate
 from firmaware.train import load_config, split_by_time, train
 from tests.test_schema import make_training_frame
+
+
+def _as_served(frame: pd.DataFrame) -> pd.DataFrame:
+    """Cast scoring numerics to the double the serving signature declares.
+
+    Nullable numerics force every numeric ColSpec to double, and MLflow refuses
+    to cast int64 to double, so integer-valued columns have to be sent as
+    doubles. A raw frame types them int64 on Linux and int32 on Windows, and
+    int32 does convert, so skipping this passes locally and fails in CI.
+    """
+    return frame.astype({column: "float64" for column in NUMERIC_COLUMNS})
 
 
 def _config() -> dict[str, object]:
@@ -182,7 +193,7 @@ class EndToEndTests(unittest.TestCase):
             )
 
             hosted_model = mlflow.pyfunc.load_model(first["mlflow"]["model_uri"])
-            hosted_scores = hosted_model.predict(scoring.iloc[:5])
+            hosted_scores = hosted_model.predict(_as_served(scoring.iloc[:5]))
             pd.testing.assert_frame_equal(
                 hosted_scores.reset_index(drop=True),
                 first_scores.drop(columns=["scored_at"])
@@ -190,10 +201,7 @@ class EndToEndTests(unittest.TestCase):
                 .reset_index(drop=True),
                 check_dtype=False,
             )
-            nullable_scoring = scoring.iloc[:1].copy()
-            nullable_scoring["uptime_days"] = nullable_scoring[
-                "uptime_days"
-            ].astype(float)
+            nullable_scoring = _as_served(scoring.iloc[:1].copy())
             nullable_scoring.loc[:, "uptime_days"] = np.nan
             nullable_hosted = hosted_model.predict(nullable_scoring)
             self.assertEqual(len(nullable_hosted), 1)

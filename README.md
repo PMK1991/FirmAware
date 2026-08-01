@@ -365,6 +365,16 @@ The MLflow model accepts the same 27 columns as
 encoding, scaling, OOD reporting, probability scoring, and decision generation
 are included in one PyFunc package.
 
+Numeric columns are nullable, so the serving signature types every one of them
+as `double`. MLflow enforces that signature before the model runs and will not
+cast `int64` to `double`, so send numerics as floats: a frame built from whole
+numbers types them `int64` on Linux, which is rejected. The batch `predict`
+path is unaffected because it validates and casts internally.
+
+```python
+frame = frame.astype({column: "float64" for column in NUMERIC_COLUMNS})
+```
+
 ```powershell
 $version = "<registered-version>"
 mlflow models serve -m "models:/FirmAwareRiskModel/$version" -p 5001 --env-manager local
