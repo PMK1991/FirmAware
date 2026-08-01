@@ -5,6 +5,7 @@ import os
 import re
 import tempfile
 import unittest
+from contextlib import chdir
 from pathlib import Path
 from unittest.mock import patch
 
@@ -168,6 +169,33 @@ class AppTests(unittest.TestCase):
             for deployment in deployments[:3]:
                 self.picker(page, "Select a deployment").set_value(deployment).run()
                 self.assertEqual(page.exception, [])
+
+    def test_bare_checkout_renders_the_committed_demo_fixtures(self) -> None:
+        """Streamlit Community Cloud serves a clone where the pipeline never ran.
+
+        Nothing is configured and outputs/ artifacts/ data/ hold no results, so
+        the page has to reach the demo fixtures on its own or it ships blank.
+        """
+        unconfigured = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("FIRMAWARE_")
+        }
+        # Ordered so chdir unwinds first: Windows refuses to delete the
+        # process's own working directory.
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(os.environ, unconfigured, clear=True),
+            chdir(directory),
+        ):
+            page = AppTest.from_file(str(APP), default_timeout=180).run()
+
+            self.assertEqual(page.exception, [])
+            self.assertFalse(page.error)
+
+            page.radio[0].set_value("Fleet Overview").run()
+            expected = len(pd.read_csv(ROOT / "demo" / "scores.csv"))
+            self.assertEqual(len(page.dataframe[0].value), expected)
 
     def test_page_reports_missing_scores_instead_of_crashing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -1,0 +1,411 @@
+{
+  "calibrated": false,
+  "cost_ratio_fn_fp": 5,
+  "cutoff_date": "2023-01-23T00:00:00",
+  "metrics": {
+    "logistic": {
+      "accuracy": 0.5242960378769,
+      "average_precision": 0.7036005107170478,
+      "brier": 0.2123118277191099,
+      "expected_cost": 2281.0,
+      "f1": 0.6488872540003678,
+      "false_negative_rate": 0.050080775444264945,
+      "false_negatives": 93,
+      "false_positive_rate": 0.8423005565862709,
+      "false_positives": 1816,
+      "log_loss": 0.6126190727422032,
+      "precision": 0.49273743016759775,
+      "recall": 0.9499192245557351,
+      "roc_auc": 0.7195635928038421,
+      "specificity": 0.15769944341372913,
+      "threshold": 0.3,
+      "true_negatives": 340,
+      "true_positives": 1764
+    },
+    "xgboost": {
+      "accuracy": 0.48417642661350613,
+      "average_precision": 0.7045496723293365,
+      "brier": 0.2097674475783054,
+      "expected_cost": 2122.0,
+      "f1": 0.6405001736714137,
+      "false_negative_rate": 0.007000538502961767,
+      "false_negatives": 13,
+      "false_positive_rate": 0.9540816326530612,
+      "false_positives": 2057,
+      "log_loss": 0.607116810796274,
+      "precision": 0.472699307869777,
+      "recall": 0.9929994614970382,
+      "roc_auc": 0.7237889428057903,
+      "specificity": 0.04591836734693878,
+      "threshold": 0.19,
+      "true_negatives": 99,
+      "true_positives": 1844
+    }
+  },
+  "mlflow": {
+    "experiment_name": "firmaware",
+    "model_uri": "runs:/a17075da37894a2389dad8ef95c20b5d/model",
+    "registered_model_name": "FirmAwareRiskModel",
+    "registered_model_uri": "models:/FirmAwareRiskModel/3",
+    "registered_model_version": "3",
+    "run_id": "a17075da37894a2389dad8ef95c20b5d",
+    "tracking_uri": "sqlite:///mlflow.db"
+  },
+  "model_name": "xgboost",
+  "params": {
+    "colsample_bytree": 0.8,
+    "gamma": 1.0,
+    "learning_rate": 0.03,
+    "max_depth": 2,
+    "min_child_weight": 5,
+    "n_estimators": 400,
+    "reg_alpha": 0.0,
+    "reg_lambda": 1.0,
+    "subsample": 0.65
+  },
+  "seed": 42,
+  "spec_version": "1.0",
+  "test_date_range": {
+    "end": "2023-12-24T00:00:00",
+    "start": "2023-01-23T00:00:00"
+  },
+  "test_size": 4013,
+  "threshold": 0.19,
+  "timestamp": "2026-07-21T20:11:30.081562Z",
+  "train_date_range": {
+    "end": "2023-01-22T00:00:00",
+    "start": "2019-03-29T00:00:00"
+  },
+  "train_size": 15987,
+  "tuning": {
+    "candidate_count": 42,
+    "champion_selection": "holdout_expected_cost",
+    "champion_validation_metrics": {
+      "accuracy": 0.49755881047492234,
+      "average_precision": 0.6889942113248578,
+      "brier": 0.21469296658351497,
+      "expected_cost": 7232.0,
+      "f1": 0.6420364709602614,
+      "false_negative_rate": 0.017739074342847928,
+      "false_negatives": 110,
+      "false_positive_rate": 0.9132157988246549,
+      "false_positives": 6682,
+      "log_loss": 0.6189904701482144,
+      "precision": 0.47686526266343066,
+      "recall": 0.9822609256571521,
+      "roc_auc": 0.718129575533244,
+      "specificity": 0.08678420117534509,
+      "threshold": 0.3,
+      "true_negatives": 635,
+      "true_positives": 6091
+    },
+    "cv_fold_count": 4,
+    "cv_preferred_model": "logistic",
+    "family_best": {
+      "logistic": {
+        "fold_metrics": [
+          {
+            "accuracy": 0.460082304526749,
+            "average_precision": 0.6675416356222776,
+            "brier": 0.22309901176960356,
+            "cutoff": "2020-12-28T00:00:00",
+            "expected_cost": 1316.0,
+            "f1": 0.629587803500847,
+            "false_negative_rate": 0.0008960573476702509,
+            "false_negatives": 1,
+            "false_positive_rate": 0.997716894977169,
+            "false_positives": 1311,
+            "fold": 1,
+            "log_loss": 0.6372907603635303,
+            "precision": 0.4596042868920033,
+            "recall": 0.9991039426523297,
+            "roc_auc": 0.6947219903656787,
+            "specificity": 0.00228310502283105,
+            "threshold": 0.3,
+            "true_negatives": 3,
+            "true_positives": 1115
+          },
+          {
+            "accuracy": 0.4776352830778855,
+            "average_precision": 0.7068576983381754,
+            "brier": 0.21255273530189805,
+            "cutoff": "2021-07-05T00:00:00",
+            "expected_cost": 1702.0,
+            "f1": 0.6339324857518632,
+            "false_negative_rate": 0.005502063273727648,
+            "false_negatives": 8,
+            "false_positive_rate": 0.9535283993115319,
+            "false_positives": 1662,
+            "fold": 2,
+            "log_loss": 0.6141644864676845,
+            "precision": 0.46525096525096526,
+            "recall": 0.9944979367262724,
+            "roc_auc": 0.7304513791065224,
+            "specificity": 0.04647160068846816,
+            "threshold": 0.3,
+            "true_negatives": 81,
+            "true_positives": 1446
+          },
+          {
+            "accuracy": 0.5073566717402334,
+            "average_precision": 0.7083669833942399,
+            "brier": 0.2099488575512702,
+            "cutoff": "2022-01-10T00:00:00",
+            "expected_cost": 2074.0,
+            "f1": 0.6452320058458166,
+            "false_negative_rate": 0.018343524180100056,
+            "false_negatives": 33,
+            "false_positive_rate": 0.8908072795146991,
+            "false_positives": 1909,
+            "fold": 3,
+            "log_loss": 0.6082288430319831,
+            "precision": 0.48054421768707484,
+            "recall": 0.9816564758198999,
+            "roc_auc": 0.7331511232584493,
+            "specificity": 0.10919272048530097,
+            "threshold": 0.3,
+            "true_negatives": 234,
+            "true_positives": 1766
+          },
+          {
+            "accuracy": 0.5269688528741453,
+            "average_precision": 0.6790456976671464,
+            "brier": 0.21598871421842067,
+            "cutoff": "2022-07-18T00:00:00",
+            "expected_cost": 2140.0,
+            "f1": 0.653817642698295,
+            "false_negative_rate": 0.03711790393013101,
+            "false_negatives": 68,
+            "false_positive_rate": 0.8502598016060463,
+            "false_positives": 1800,
+            "fold": 4,
+            "log_loss": 0.6223789985593613,
+            "precision": 0.494949494949495,
+            "recall": 0.962882096069869,
+            "roc_auc": 0.7117643509704141,
+            "specificity": 0.14974019839395372,
+            "threshold": 0.3,
+            "true_negatives": 317,
+            "true_positives": 1764
+          }
+        ],
+        "params": {
+          "C": 0.001,
+          "class_weight": "balanced",
+          "max_iter": 2000
+        },
+        "threshold": 0.3,
+        "validation_metrics": {
+          "accuracy": 0.49755881047492234,
+          "average_precision": 0.6889942113248578,
+          "brier": 0.21469296658351497,
+          "expected_cost": 7232.0,
+          "f1": 0.6420364709602614,
+          "false_negative_rate": 0.017739074342847928,
+          "false_negatives": 110,
+          "false_positive_rate": 0.9132157988246549,
+          "false_positives": 6682,
+          "log_loss": 0.6189904701482144,
+          "precision": 0.47686526266343066,
+          "recall": 0.9822609256571521,
+          "roc_auc": 0.718129575533244,
+          "specificity": 0.08678420117534509,
+          "threshold": 0.3,
+          "true_negatives": 635,
+          "true_positives": 6091
+        }
+      },
+      "xgboost": {
+        "fold_metrics": [
+          {
+            "accuracy": 0.48518518518518516,
+            "average_precision": 0.6725272065549068,
+            "brier": 0.2185002925163771,
+            "cutoff": "2020-12-28T00:00:00",
+            "expected_cost": 1355.0,
+            "f1": 0.63538327018362,
+            "false_negative_rate": 0.023297491039426525,
+            "false_negatives": 26,
+            "false_positive_rate": 0.9322678843226788,
+            "false_positives": 1225,
+            "fold": 1,
+            "log_loss": 0.6272045437175323,
+            "precision": 0.4708423326133909,
+            "recall": 0.9767025089605734,
+            "roc_auc": 0.6979106997703255,
+            "specificity": 0.06773211567732115,
+            "threshold": 0.19,
+            "true_negatives": 89,
+            "true_positives": 1090
+          },
+          {
+            "accuracy": 0.4741945573975602,
+            "average_precision": 0.703960568937517,
+            "brier": 0.20730929889818536,
+            "cutoff": "2021-07-05T00:00:00",
+            "expected_cost": 1701.0,
+            "f1": 0.6328892771347456,
+            "false_negative_rate": 0.0034387895460797797,
+            "false_negatives": 5,
+            "false_positive_rate": 0.9615605278255881,
+            "false_positives": 1676,
+            "fold": 2,
+            "log_loss": 0.601210397424583,
+            "precision": 0.46368,
+            "recall": 0.9965612104539202,
+            "roc_auc": 0.7308755556712998,
+            "specificity": 0.03843947217441193,
+            "threshold": 0.19,
+            "true_negatives": 67,
+            "true_positives": 1449
+          },
+          {
+            "accuracy": 0.4789446981227803,
+            "average_precision": 0.7040200646833613,
+            "brier": 0.20732133292209365,
+            "cutoff": "2022-01-10T00:00:00",
+            "expected_cost": 2090.0,
+            "f1": 0.635427760028399,
+            "false_negative_rate": 0.005002779321845469,
+            "false_negatives": 9,
+            "false_positive_rate": 0.9542697153523099,
+            "false_positives": 2045,
+            "fold": 3,
+            "log_loss": 0.6016348611463305,
+            "precision": 0.4667535853976532,
+            "recall": 0.9949972206781545,
+            "roc_auc": 0.729450980829553,
+            "specificity": 0.045730284647690154,
+            "threshold": 0.19,
+            "true_negatives": 98,
+            "true_positives": 1790
+          },
+          {
+            "accuracy": 0.4849328944036465,
+            "average_precision": 0.6801856923378093,
+            "brier": 0.21380352691394824,
+            "cutoff": "2022-07-18T00:00:00",
+            "expected_cost": 2114.0,
+            "f1": 0.6405090137857901,
+            "false_negative_rate": 0.010917030567685589,
+            "false_negatives": 20,
+            "false_positive_rate": 0.9513462446858763,
+            "false_positives": 2014,
+            "fold": 4,
+            "log_loss": 0.6174427398337627,
+            "precision": 0.47360167276529014,
+            "recall": 0.9890829694323144,
+            "roc_auc": 0.7148242909860497,
+            "specificity": 0.04865375531412376,
+            "threshold": 0.19,
+            "true_negatives": 103,
+            "true_positives": 1812
+          }
+        ],
+        "params": {
+          "colsample_bytree": 0.8,
+          "gamma": 1.0,
+          "learning_rate": 0.03,
+          "max_depth": 2,
+          "min_child_weight": 5,
+          "n_estimators": 400,
+          "reg_alpha": 0.0,
+          "reg_lambda": 1.0,
+          "subsample": 0.65
+        },
+        "threshold": 0.19,
+        "validation_metrics": {
+          "accuracy": 0.4806924101198402,
+          "average_precision": 0.69044779907006,
+          "brier": 0.21122165716484465,
+          "expected_cost": 7260.0,
+          "f1": 0.636307118433323,
+          "false_negative_rate": 0.009675858732462506,
+          "false_negatives": 60,
+          "false_positive_rate": 0.951209512095121,
+          "false_positives": 6960,
+          "log_loss": 0.610748830007572,
+          "precision": 0.4687428440577055,
+          "recall": 0.9903241412675375,
+          "roc_auc": 0.7197041451143427,
+          "specificity": 0.04879048790487905,
+          "threshold": 0.19,
+          "true_negatives": 357,
+          "true_positives": 6141
+        }
+      }
+    },
+    "folds": [
+      {
+        "cutoff": "2020-12-28T00:00:00",
+        "fold": 1,
+        "train_date_range": {
+          "end": "2020-12-27T00:00:00",
+          "start": "2019-03-29T00:00:00"
+        },
+        "train_size": 2469,
+        "validation_date_range": {
+          "end": "2021-07-04T00:00:00",
+          "start": "2020-12-28T00:00:00"
+        },
+        "validation_size": 2430
+      },
+      {
+        "cutoff": "2021-07-05T00:00:00",
+        "fold": 2,
+        "train_date_range": {
+          "end": "2021-07-04T00:00:00",
+          "start": "2019-03-29T00:00:00"
+        },
+        "train_size": 4899,
+        "validation_date_range": {
+          "end": "2022-01-09T00:00:00",
+          "start": "2021-07-05T00:00:00"
+        },
+        "validation_size": 3197
+      },
+      {
+        "cutoff": "2022-01-10T00:00:00",
+        "fold": 3,
+        "train_date_range": {
+          "end": "2022-01-09T00:00:00",
+          "start": "2019-03-29T00:00:00"
+        },
+        "train_size": 8096,
+        "validation_date_range": {
+          "end": "2022-07-17T00:00:00",
+          "start": "2022-01-10T00:00:00"
+        },
+        "validation_size": 3942
+      },
+      {
+        "cutoff": "2022-07-18T00:00:00",
+        "fold": 4,
+        "train_date_range": {
+          "end": "2022-07-17T00:00:00",
+          "start": "2019-03-29T00:00:00"
+        },
+        "train_size": 12038,
+        "validation_date_range": {
+          "end": "2023-01-22T00:00:00",
+          "start": "2022-07-18T00:00:00"
+        },
+        "validation_size": 3949
+      }
+    ],
+    "initial_train_quantile": 0.4,
+    "selection_metric": "expected_cost",
+    "strategy": "randomized_expanding_time_cv"
+  },
+  "validation_cutoff_date": "2020-12-28T00:00:00",
+  "validation_date_range": {
+    "end": "2023-01-22T00:00:00",
+    "start": "2020-12-28T00:00:00"
+  },
+  "validation_size": 13518,
+  "validation_train_date_range": {
+    "end": "2020-12-27T00:00:00",
+    "start": "2019-03-29T00:00:00"
+  },
+  "validation_train_size": 2469
+}

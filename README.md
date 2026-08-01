@@ -499,6 +499,32 @@ a sidebar selector exposes the earlier immutable objects. Flags the model
 consumes are labeled separately from operator context that only annotates a
 deployment.
 
+### Hosted demo on Streamlit Community Cloud
+
+When nothing is configured and the pipeline has not run in the checkout, the page
+falls back to the fixtures in `demo/`: one scored run, the upcoming batch behind
+it, and the champion's `metadata.json`, 28 KB in total. A bare clone therefore
+renders, which is exactly what Community Cloud serves.
+
+Deploy from [share.streamlit.io](https://share.streamlit.io):
+
+| Field | Value |
+| --- | --- |
+| Repository | `PMK1991/FirmAware` |
+| Branch | `main` |
+| Main file path | `app.py` |
+| Python version, under Advanced settings | `3.11` or `3.12` |
+
+`requirements.txt` installs `.[app]` so the deploy resolves the same pins as
+everything else. Choose the interpreter explicitly: `numpy==1.26.4` publishes no
+wheels for 3.13 or newer, and Community Cloud ignores `runtime.txt`.
+
+The hosted demo reads those committed fixtures rather than the live buckets.
+Community Cloud cannot federate a GCP identity, and issuing a service account key
+to give it one would break the keyless guarantee the deployment is built on. It
+also serves `*.streamlit.app` only, so a custom domain still needs the Cloud Run
+path described under [Deployment topology](#deployment-topology).
+
 ## Decisions where the specification was silent
 
 | Decision | Implementation |

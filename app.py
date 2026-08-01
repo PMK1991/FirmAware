@@ -11,6 +11,9 @@ Sources follow the same environment contract as the pipeline:
     FIRMAWARE_SCORES_URI     default outputs/scores.csv, or gs://.../scores
     FIRMAWARE_DATA_URI       default data/
     FIRMAWARE_ARTIFACTS_URI  default artifacts/, or gs://.../artifacts
+
+When nothing is configured and the pipeline has not run here, the page falls
+back to the small committed fixtures in demo/ so a fresh clone renders.
 """
 
 from __future__ import annotations
@@ -33,11 +36,40 @@ from firmaware.io import (
 )
 from firmaware.schema import validate
 
-SCORES_URI = os.getenv("FIRMAWARE_SCORES_URI", str(Path("outputs") / "scores.csv"))
+DEMO_DIR = Path(__file__).resolve().parent / "demo"
+
+
+def resolve_uri(env_var: str, default: str, demo: str, probe: str | None = None) -> str:
+    """Pick a source: explicit configuration, then real pipeline output, then demo.
+
+    The demo fixtures are a last resort for a checkout where the pipeline has
+    never run. A configured URI is always honoured as-is, and a remote default
+    is never probed, so a deployment reading GCS can still legitimately be
+    looking at an empty bucket rather than silently showing sample data.
+    """
+    configured = os.getenv(env_var)
+    if configured:
+        return configured
+    if is_gcs_uri(default) or Path(probe or default).exists():
+        return default
+    fallback = DEMO_DIR / demo
+    return str(fallback) if fallback.exists() else default
+
+
+SCORES_URI = resolve_uri(
+    "FIRMAWARE_SCORES_URI", str(Path("outputs") / "scores.csv"), "scores.csv"
+)
 DATA_URI = os.getenv("FIRMAWARE_DATA_URI", "data")
-ARTIFACTS_URI = os.getenv("FIRMAWARE_ARTIFACTS_URI", "artifacts")
-UPCOMING_URI = os.getenv("FIRMAWARE_UPCOMING_URI") or join_uri(
-    DATA_URI, "upcoming_deployments.csv"
+ARTIFACTS_URI = resolve_uri(
+    "FIRMAWARE_ARTIFACTS_URI",
+    "artifacts",
+    "artifacts",
+    probe=str(Path("artifacts") / "metadata.json"),
+)
+UPCOMING_URI = resolve_uri(
+    "FIRMAWARE_UPCOMING_URI",
+    join_uri(DATA_URI, "upcoming_deployments.csv"),
+    "upcoming_deployments.csv",
 )
 
 st.set_page_config(
