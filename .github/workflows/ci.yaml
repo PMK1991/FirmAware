@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install -e ".[dev,app,train]"
       - run: ruff check src tests
       - run: python -m pytest -q
 
@@ -30,7 +30,11 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: firmaware:ci
+      # Building only proves the install resolved. Cloud Run runs this image,
+      # so also prove the entrypoint imports the training stack it was built for.
+      - run: docker run --rm firmaware:ci --help
 
   terraform:
     runs-on: ubuntu-latest

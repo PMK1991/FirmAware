@@ -21,7 +21,7 @@ behavior is abstracted into production modules. Run them in order:
 From the repository root:
 
 ```powershell
-python -m pip install -e .
+python -m pip install -e ".[train]"
 python -m pip install -r notebooks\requirements.txt
 python -m jupyter lab notebooks
 ```

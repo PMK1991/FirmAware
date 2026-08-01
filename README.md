@@ -5,6 +5,30 @@ time-aware hyperparameter tuning, detailed MLflow experiment tracking, model
 registry publication, and a raw-input model package that can be served locally
 or moved to Azure ML and GCP.
 
+**Live demo: [firmaware.streamlit.app](https://firmaware.streamlit.app/)** — the
+read-only page at the end of the pipeline. It renders an already-scored run and
+never trains, scores, or writes anything. The hosted copy reads a committed
+sample run; pointed at the buckets it reads the live one.
+
+![Fleet Overview](docs/images/fleet-overview.png)
+
+*Fleet Overview — the whole scored run at once: headline counts, band, decision,
+and vendor filters, the register, and distributions. The gauge shows fleet average
+risk against the same threshold marker used per deployment.*
+
+![Deployment Inspector](docs/images/deployment-inspector.png)
+
+*Deployment Inspector — one deployment in full. The stamp carries the GO/NO_GO
+decision and risk band, the gauge places its failure probability against the
+threshold, and the flag panel reports how many of the nine risk conditions are
+raised.*
+
+Both screenshots are of the live GCP environment: `xgboost` champion run
+`2026-07-31T16:19:30`, threshold `0.1800`, scoring the run the nightly Cloud
+Scheduler job produced unattended at `2026-08-01T02:02:02`. The rest of this file
+follows the same order the pipeline runs in: what the decision is, how the system
+is designed, how to run it, how it reaches the cloud, and how it is displayed.
+
 The GCP batch deployment, Terraform modules, keyless CI/CD, smoke tests, and
 rollback runbook are documented in [`infra/README.md`](infra/README.md).
 The exploratory-to-deployment notebook workflow is documented in
@@ -253,6 +277,25 @@ The provider boundary is MLflow plus environment variables. Training logic does
 not import Azure or GCP SDKs, so the same container and command can move between
 platforms.
 
+### Deployed GCP architecture
+
+The table above is the portable design. These two diagrams are the concrete
+deployment live in project `firmaware` (`us-central1`, `dev`), taken from
+`infra/` and `.github/workflows/`. The editable source is
+[`docs/architecture/firmaware-gcp-architecture.drawio`](docs/architecture/firmaware-gcp-architecture.drawio);
+re-export the PNGs whenever it changes.
+
+Cloud Scheduler triggers the nightly `predict` job. The three Cloud Run Jobs
+share one runtime identity, but each bucket grants only the roles that job
+needs, and the Streamlit page sits outside GCP reading scores only.
+
+![GCP runtime architecture](docs/images/gcp-runtime-architecture.png)
+
+GitHub authenticates without a stored key, then a candidate is applied with the
+scheduler paused and proven against real data before the schedule resumes.
+
+![GCP CI/CD architecture](docs/images/gcp-cicd-architecture.png)
+
 ### Reliability, security, and operational controls
 
 - **Determinism:** every candidate and stochastic model uses the configured
@@ -290,8 +333,14 @@ Python 3.11 or newer is required. From the project root:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e .
+python -m pip install -e ".[train]"
 ```
+
+The base install carries only the schema, feature and IO modules. Modelling
+lives behind the `train` extra, the read-only page behind `app`, and tooling
+behind `dev`; use `".[dev,app,train]"` to work on the whole repository. The
+split is what keeps the hosted page off scikit-learn, xgboost and MLflow, which
+it never calls: 402 MB over 55 packages rather than 855 MB over 114.
 
 Place `deployment_events.csv` and `upcoming_deployments.csv` in `data\`.
 Training input has the 30-column schema in the specification. Scoring input
@@ -409,7 +458,8 @@ only for `gs://` URIs. Cloud Run Jobs read inputs from GCS, publish immutable
 model runs plus `champion.json`, and create one new score object per execution.
 The Cloud deployment intentionally has no MLflow server: GCS metadata is its
 system of record, while the local SQLite MLflow store remains available for
-development. See [`infra/README.md`](infra/README.md).
+development. See [`infra/README.md`](infra/README.md) and the
+[deployed GCP architecture diagrams](#deployed-gcp-architecture).
 
 When tracking through a remote HTTP or managed endpoint, FirmAware leaves
 artifact routing to the server unless an explicit cloud artifact URI is set.
@@ -449,21 +499,8 @@ filters, a fleet-average gauge, and band, decision, and tier distributions.
 **Deployment Inspector** shows one deployment's GO/NO_GO stamp, probability
 gauge, equipment attributes, and risk flags.
 
-![Fleet Overview](docs/images/fleet-overview.png)
-
-*Fleet Overview — the whole scored run at once: headline counts, band/decision/vendor
-filters, the register, and distributions. The gauge shows fleet average risk against the
-same threshold marker used per deployment.*
-
-![Deployment Inspector](docs/images/deployment-inspector.png)
-
-*Deployment Inspector — one deployment in full. The stamp carries the GO/NO_GO decision
-and risk band, the gauge places its failure probability against the threshold, and the
-flag panel reports how many of the nine risk conditions are raised.*
-
-Both screenshots are of the live GCP environment: `xgboost` champion run
-`2026-07-31T16:19:30`, threshold `0.1800`, scoring the run the nightly Cloud
-Scheduler job produced unattended at `2026-08-01T02:02:02`.
+Both views are pictured at the [top of this file](#firmaware) and running at
+[firmaware.streamlit.app](https://firmaware.streamlit.app/).
 
 The flag panel always states its count as `N of 9 raised`. Roughly a third of
 deployments legitimately raise nothing, and those rows cluster early in the
@@ -478,6 +515,42 @@ threshold instead of fixed cut points, so the display cannot drift from
 a sidebar selector exposes the earlier immutable objects. Flags the model
 consumes are labeled separately from operator context that only annotates a
 deployment.
+
+### Hosted demo on Streamlit Community Cloud
+
+[firmaware.streamlit.app](https://firmaware.streamlit.app/) serves this page from
+`feature/mlflow-pipeline`. When nothing is configured and the pipeline has not
+run in the checkout, the page falls back to the fixtures in `demo/`: one scored
+run, the upcoming batch behind it, and the champion's `metadata.json`, 28 KB in
+total. A bare clone therefore renders, which is exactly what Community Cloud
+serves.
+
+Deploy from [share.streamlit.io](https://share.streamlit.io):
+
+| Field | Value |
+| --- | --- |
+| Repository | `PMK1991/FirmAware` |
+| Branch | `main`, or whichever branch you are deploying |
+| Main file path | `app.py` |
+| Python version, under Advanced settings | `3.13` |
+
+`requirements.txt` installs `.[app]`, which carries the page and none of the
+training stack, so the build stays at 402 MB over 55 packages instead of 855 MB
+over 114.
+
+Set the interpreter explicitly. Community Cloud now defaults to 3.14, and
+Streamlit's own `pyarrow` dependency publishes no 3.14 wheel, so the builder
+tries to compile Arrow from source without a toolchain and the deploy fails
+with "Error installing requirements". No pin in this repository can fix a wheel
+that does not exist, and the version cannot be changed after the fact: an app
+already on 3.14 has to be deleted and redeployed. The install and a full render
+are verified on 3.13.
+
+The hosted demo reads those committed fixtures rather than the live buckets.
+Community Cloud cannot federate a GCP identity, and issuing a service account key
+to give it one would break the keyless guarantee the deployment is built on. It
+also serves `*.streamlit.app` only, so a custom domain still needs the Cloud Run
+path described under [Deployment topology](#deployment-topology).
 
 ## Decisions where the specification was silent
 

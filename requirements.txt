@@ -1,0 +1,13 @@
+# Streamlit Community Cloud installs from requirements.txt and ignores
+# pyproject.toml, so this file only points the deploy at the "app" extra that
+# already pins every version. Nothing is restated here, because a second copy
+# of the pins is a second thing to forget to bump.
+#
+# Deploy this on Python 3.13, chosen in Community Cloud's Advanced settings.
+# The default is now 3.14, where Streamlit's own pyarrow dependency has no
+# wheel; the builder has no compiler, so the deploy dies on Arrow before it
+# reaches anything in this repository. Nothing here can fix that.
+#
+# numpy is left to a range rather than an exact pin for the same class of
+# reason: 1.26.4 publishes no wheels past 3.12. Training still pins it exactly.
+.[app]
