@@ -10,10 +10,10 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "pandas==2.2.3",
-  # Deliberately a range where every other pin is exact. The page resolves this
-  # on whatever interpreter Community Cloud offers, and 1.26 publishes no wheels
-  # for 3.13+, so pinning it here made the hosted deploy try to compile numpy
-  # from source and fail. Training narrows it back to an exact version below.
+  # A range, where every other pin here is exact. Community Cloud picks the
+  # interpreter, 1.26 publishes no wheels past 3.12, and the hosted deploy has
+  # no toolchain to build one, so an exact pin here cost the page two
+  # interpreter versions. Training narrows it back to exact below.
   "numpy>=1.26,<3",
   "PyYAML==6.0.2",
   "google-cloud-storage==3.13.0",
@@ -25,10 +25,10 @@ dependencies = [
 # deployment, 402 MB over 55 packages against 855 MB over 114, because
 # scikit-learn and xgboost drag in scipy and mlflow drags in a web stack.
 train = [
-  # Pinned with the rest of the numerical stack, and pinned here rather than in
-  # the base because MLflow is what constrains it: numpy 2 tightened can_cast,
-  # so MLflow rejects int64 input against a double signature. Nothing can train
-  # without this extra, so the constraint still holds wherever it matters.
+  # The exact numpy pin lives here rather than in the base because MLflow is
+  # what constrains it: numpy 2 tightened can_cast, so MLflow rejects int64
+  # input against a double signature. Nothing can train without this extra, so
+  # the constraint still holds everywhere it applies.
   "numpy==1.26.4",
   "scikit-learn==1.6.1",
   "xgboost==3.0.5",

@@ -519,11 +519,19 @@ Deploy from [share.streamlit.io](https://share.streamlit.io):
 | Repository | `PMK1991/FirmAware` |
 | Branch | `main`, or whichever branch you are deploying |
 | Main file path | `app.py` |
+| Python version, under Advanced settings | `3.13` |
 
 `requirements.txt` installs `.[app]`, which carries the page and none of the
 training stack, so the build stays at 402 MB over 55 packages instead of 855 MB
-over 114. It resolves on whatever interpreter Community Cloud offers; the
-install and a full render are verified on Python 3.13 against numpy 2.
+over 114.
+
+Set the interpreter explicitly. Community Cloud now defaults to 3.14, and
+Streamlit's own `pyarrow` dependency publishes no 3.14 wheel, so the builder
+tries to compile Arrow from source without a toolchain and the deploy fails
+with "Error installing requirements". No pin in this repository can fix a wheel
+that does not exist, and the version cannot be changed after the fact: an app
+already on 3.14 has to be deleted and redeployed. The install and a full render
+are verified on 3.13.
 
 The hosted demo reads those committed fixtures rather than the live buckets.
 Community Cloud cannot federate a GCP identity, and issuing a service account key
