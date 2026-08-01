@@ -30,7 +30,11 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: firmaware:ci
+      # Building only proves the install resolved. Cloud Run runs this image,
+      # so also prove the entrypoint imports the training stack it was built for.
+      - run: docker run --rm firmaware:ci --help
 
   terraform:
     runs-on: ubuntu-latest
