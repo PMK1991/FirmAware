@@ -1,0 +1,51 @@
+$schema: https://azuremlschemas.azureedge.net/latest/batchDeployment.schema.json
+name: batch-${{MODEL_VERSION}}
+endpoint_name: firmaware-batch-${{ENV}}
+description: >-
+  Bulk scoring against the exact registry version the online endpoint is serving.
+  Named after the model version rather than blue/green because batch rollback is
+  a different operation: you re-point the endpoint's default deployment at an
+  earlier version, so the versions have to remain individually addressable.
+
+# Same registered PyFunc as the online deployment. One model, one preprocessing
+# path, one threshold -- a batch score and a real-time score for the same row
+# must agree, and they cannot if the two paths load different artefacts.
+model: azureml:FirmAwareRiskModel:${{MODEL_VERSION}}
+
+compute: azureml:firmaware-cluster
+environment: azureml:firmaware-env@latest
+code_configuration:
+  code: .
+  # NOT score.py. Batch invokes run(mini_batch) with a list of file paths and
+  # has no HTTP status to set, so it needs its own entry point.
+  scoring_script: batch_score.py
+
+resources:
+  instance_count: 1
+
+settings:
+  # Batch scoring is idempotent per row, so a transient node failure should retry
+  # rather than fail a whole run of thousands of rows.
+  max_concurrency_per_instance: 2
+  mini_batch_size: 500
+  retry_settings:
+    max_retries: 3
+    timeout: 300
+  # Zero: a single unscoreable row is a contract failure, and the append-only
+  # scores object must never contain a partial run that looks complete.
+  error_threshold: 0
+  logging_level: info
+  output_action: append_row
+  output_file_name: predictions.csv
+
+# The resource-group tag policy denies any resource missing one of the six
+# mandatory tags, and a batch deployment is an indexed ARM resource.
+tags:
+  app: firmaware
+  env: ${{ENV}}
+  owner: ${{OWNER}}
+  cost_center: ${{COST_CENTER}}
+  data_classification: ${{DATA_CLASSIFICATION}}
+  managed_by: ${{MANAGED_BY}}
+  image_digest: ${{IMAGE_DIGEST}}
+  model_version: ${{MODEL_VERSION}}

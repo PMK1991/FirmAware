@@ -32,11 +32,40 @@ train = [
   "numpy==1.26.4",
   "scikit-learn==1.6.1",
   "xgboost==3.0.5",
-  "mlflow==3.14.0",
+  # Capped at 3.13.0 by azureml-mlflow, whose newest release requires
+  # mlflow-skinny<=3.13.0. Pinned to the same version in every environment
+  # rather than letting the azure extra pull a different one: the tracking
+  # client writes run metadata, and two versions across local, GCP and AML is
+  # exactly the kind of drift the exact pins here exist to prevent.
+  "mlflow==3.13.0",
 ]
 app = [
   "streamlit==1.51.0",
   "plotly==6.4.0",
+]
+# Azure's storage SDK is optional for the same reason google-cloud-storage is
+# not: io.py imports it lazily, so only a deployment that actually reads
+# abfss:// pays for it. The Azure ML image installs this extra; the Streamlit
+# page and the GCP jobs never do.
+#
+# azureml-mlflow and azureml-inference-server-http are here rather than in an
+# AML conda_file because the runtime image is python:3.11-slim, which has no
+# conda: a conda_file layered onto it cannot build. Putting them in the image
+# also keeps the deployed artefact the thing that was tested, instead of
+# something AML assembles at deploy time.
+azure = [
+  "azure-identity>=1.17,<2",
+  "azure-storage-file-datalake>=12.16,<13",
+  # Redirects the application's existing MLflow calls at the workspace tracking
+  # store without any application code change. Pinned exactly: the release range
+  # is what caps mlflow above, and an open range lets the resolver backtrack to
+  # a 1.5x release that also caps azure-storage-blob below what the datalake
+  # client needs, producing an unsolvable set rather than an older install.
+  "azureml-mlflow==1.62.0.post5",
+  # Managed online endpoints run the scoring script under this server. Without
+  # it in the image, a custom-image deployment with a scoring_script fails to
+  # start.
+  "azureml-inference-server-http>=1.0,<2",
 ]
 dev = [
   "pytest>=8.0,<9",

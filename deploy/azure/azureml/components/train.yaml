@@ -1,0 +1,30 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+
+name: firmaware_train
+display_name: train
+version: "1"
+description: >-
+  Runs the application's own training entrypoint. Expanding-window CV, the
+  randomized search, threshold selection and the untouched final test report all
+  live in firmaware.train and are not reimplemented here -- the pipeline's job is
+  to supply inputs and capture outputs, not to own modelling logic.
+
+inputs:
+  dataset:
+    type: uri_file
+  config:
+    type: uri_file
+
+outputs:
+  model_dir:
+    type: uri_folder
+    description: model.joblib, preprocessor.joblib, metadata.json and evaluation/.
+
+environment: azureml:firmaware-env@latest
+
+command: >-
+  python -m firmaware train
+  --input ${{inputs.dataset}}
+  --config ${{inputs.config}}
+  --artifacts-dir ${{outputs.model_dir}}

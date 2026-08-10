@@ -1,0 +1,37 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+
+name: firmaware_validate
+display_name: validate
+version: "1"
+description: >-
+  Contract gate. Runs the same schema.validate the CLI and the scoring endpoint
+  run, in training mode, so an out-of-vocabulary deployment_outcome stops the
+  pipeline here rather than becoming a silently mislabelled row.
+
+  The rows are copied to the output only after the check exits zero, and every
+  downstream step reads that copy rather than the original asset. That is what
+  makes the ordering enforced by the DAG instead of by convention -- there is no
+  path to the model that goes around this component.
+
+inputs:
+  data:
+    type: uri_file
+    description: Versioned deployment_events data asset.
+
+outputs:
+  validated:
+    type: uri_file
+    description: The same bytes, published only if validation passed.
+
+environment: azureml:firmaware-env@latest
+
+# No code directory: the component invokes the installed package, which is the
+# same entrypoint the container runs on GCP and the same one the acceptance tests
+# cover. There is no Azure-specific validation logic that could drift from the
+# contract. The copy is guarded by && so a failed check publishes nothing.
+command: >-
+  python -m firmaware validate
+  --input ${{inputs.data}}
+  --mode training
+  && cp ${{inputs.data}} ${{outputs.validated}}

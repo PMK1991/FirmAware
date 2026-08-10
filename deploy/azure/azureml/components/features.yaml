@@ -1,0 +1,36 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+
+name: firmaware_features
+display_name: features
+version: "1"
+description: >-
+  Derives and publishes the feature table for inspection and drift comparison,
+  and passes the validated rows through unchanged.
+
+  Training re-derives features from those raw rows on purpose: that is the code
+  path serving uses, and a second pre-computed path is exactly how train/serve
+  skew starts. So this step proves the features are derivable and shows what they
+  look like; it does not hand them to the model.
+
+inputs:
+  data:
+    type: uri_file
+    description: The validated rows from the validate component, never the raw asset.
+
+outputs:
+  dataset:
+    type: uri_file
+    description: The validated rows, byte-identical, consumed by train.
+  features:
+    type: uri_folder
+    description: features.parquet plus feature_profile.json, read by the evaluate gate.
+
+code: ./steps
+environment: azureml:firmaware-env@latest
+
+command: >-
+  python features_step.py
+  --data ${{inputs.data}}
+  --dataset ${{outputs.dataset}}
+  --features ${{outputs.features}}

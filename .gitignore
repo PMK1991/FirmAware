@@ -4,7 +4,14 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+# Source documents as originally dropped into the repo root. The organized,
+# reviewable copies live under docs/design/ and docs/architecture/; these are
+# byte-identical originals kept locally so the root stays clean.
 FirmAware_GCP_Deployment_Spec.md
+FirmAware_Azure_Architecture.md
+FirmAware_Azure_Implementation_Spec.md
+FirmAware_RAG_HLD_LLD.md
+FirmAware_Azure_ML_Architecture.drawio
 notebook_runs/
 .terraform/
 *.tfplan

@@ -1,0 +1,19 @@
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineEndpoint.schema.json
+name: firmaware-score-${{ENV}}
+description: >-
+  Real-time risk scoring. Blue and green deployments each pin one MLflow model
+  version; rollback is a traffic shift, not a redeploy.
+auth_mode: aad_token
+public_network_access: enabled
+identity:
+  type: user_assigned
+  user_assigned_identities:
+    - resource_id: ${{ENDPOINT_IDENTITY_RESOURCE_ID}}
+traffic:
+  blue: 100
+  green: 0
+tags:
+  app: firmaware
+  env: ${{ENV}}
+  managed_by: terraform
+  data_classification: internal

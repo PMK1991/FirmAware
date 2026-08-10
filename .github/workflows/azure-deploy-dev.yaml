@@ -1,0 +1,220 @@
+name: Deploy dev (Azure)
+
+# Runs on merge to main. The order below is the deployment contract, and every
+# step is a gate for the one after it:
+#
+#   build (digest) -> terraform apply -> deploy green at 0% -> smoke -> promote
+#   10/50/100 with a health check between each -> security_check
+#
+# The new deployment holds zero traffic until it has proved it can score the
+# fixture correctly, and any failure during promotion rolls the endpoint back to
+# the previously live slot. There is no path through this file that leaves
+# production serving something that was never smoke tested.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/azure/**"
+      - "deploy/azure/**"
+      - "src/**"
+      - "pyproject.toml"
+      - "Dockerfile"
+      - ".github/workflows/azure-deploy-dev.yaml"
+  workflow_dispatch:
+    inputs:
+      run_training:
+        description: "Submit the training pipeline before deploying"
+        type: boolean
+        default: false
+
+# id-token to federate with Azure, contents to check out the code. Nothing else:
+# this workflow has no reason to write to the repository or to packages.
+permissions:
+  id-token: write
+  contents: read
+
+# One deploy at a time. Two concurrent applies against one Terraform state is a
+# corrupted state file, and two concurrent traffic shifts is an endpoint in an
+# unknown split.
+concurrency:
+  group: azure-deploy-dev
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: rg-firmaware-dev
+  AZURE_ML_WORKSPACE: mlw-firmaware-dev
+  TF_VAR_FILE: envs/dev.tfvars
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    outputs:
+      image_digest: ${{ steps.build.outputs.image_digest }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.13"
+
+      # Federated: the workflow presents a short-lived OIDC token and receives an
+      # Azure token scoped to one managed identity. There is no secret in this
+      # repository to rotate, expire, or leak.
+      - name: Azure login (OIDC)
+        uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install az ml extension
+        run: az extension add --name ml --yes --allow-preview false
+
+      - name: Resolve registry name
+        id: registry
+        run: |
+          acr="$(az acr list -g "${AZURE_RESOURCE_GROUP}" --query "[0].name" -o tsv)"
+          echo "name=${acr}" >> "$GITHUB_OUTPUT"
+
+      # Built in ACR, so the runner never needs a Docker daemon or registry
+      # credentials. Emits the digest that every later step refers to.
+      - name: Build and push image
+        id: build
+        env:
+          AZURE_ACR_NAME: ${{ steps.registry.outputs.name }}
+        run: bash deploy/azure/build.sh dev
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.10.5"
+
+      - name: Terraform init
+        working-directory: infra/azure
+        run: terraform init -backend-config=envs/dev.backend.hcl
+
+      # The plan is written to the step summary so a reviewer can read what
+      # changed without opening the run log, and applied from the saved plan file
+      # so what is applied is exactly what was shown.
+      - name: Terraform plan
+        working-directory: infra/azure
+        run: |
+          terraform plan -var-file="${TF_VAR_FILE}" -out=tfplan -no-color | tee plan.txt
+          {
+            echo "### Terraform plan (dev)"
+            echo '```'
+            tail -n 100 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Terraform apply
+        working-directory: infra/azure
+        run: terraform apply -auto-approve tfplan
+
+      - name: Read Terraform outputs
+        id: tf
+        working-directory: infra/azure
+        run: |
+          {
+            echo "storage_account=$(terraform output -raw storage_account_name)"
+            echo "key_vault=$(terraform output -raw key_vault_name)"
+            echo "workspace=$(terraform output -raw machine_learning_workspace_name)"
+            echo "instance_type=$(terraform output -raw online_instance_type)"
+            echo "endpoint_enabled=$(terraform output -raw online_endpoint_enabled)"
+            echo "cicd_principal=$(terraform output -raw cicd_identity_principal_id)"
+          } >> "$GITHUB_OUTPUT"
+
+      # After Terraform (the workspace must exist) and after the build (the
+      # environment pins the image digest). Everything downstream refers to
+      # `azureml:firmaware-env@latest` and the two data assets, so nothing can
+      # run until these are registered.
+      - name: Register AML environment and data assets
+        id: assets
+        env:
+          AZURE_ACR_NAME: ${{ steps.registry.outputs.name }}
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          AZURE_STORAGE_ACCOUNT: ${{ steps.tf.outputs.storage_account }}
+          FIRMAWARE_IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+        run: bash deploy/azure/register_assets.sh dev
+
+      # Training is not wired to merge. It runs only when explicitly requested,
+      # because a model change deserves its own decision even when the code that
+      # produced it did not change.
+      - name: Train
+        id: train
+        if: inputs.run_training
+        env:
+          FIRMAWARE_IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+        run: bash deploy/azure/run_training.sh dev
+
+      - name: Resolve model version
+        id: model
+        if: steps.tf.outputs.endpoint_enabled == 'true'
+        env:
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+        run: |
+          version="${{ steps.train.outputs.model_version }}"
+          if [[ -z "${version}" ]]; then
+            version="$(az ml model list --name FirmAwareRiskModel \
+              --workspace-name "${AZURE_ML_WORKSPACE}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --query "[].version" -o tsv | sort -n | tail -1)"
+          fi
+          [[ -n "${version}" ]] || { echo "no registered model to deploy" >&2; exit 1; }
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy into the idle slot at 0% traffic
+        id: deploy
+        if: steps.tf.outputs.endpoint_enabled == 'true'
+        env:
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          FIRMAWARE_INSTANCE_TYPE: ${{ steps.tf.outputs.instance_type }}
+          FIRMAWARE_MIN_INSTANCES: "0"
+        run: |
+          bash deploy/azure/deploy_endpoint.sh dev \
+            "${{ steps.model.outputs.version }}" \
+            "${{ steps.build.outputs.image_digest }}"
+
+      # Deployment-specific route: this proves the new slot works while the old
+      # one is still serving every real request.
+      - name: Smoke test the new slot
+        if: steps.tf.outputs.endpoint_enabled == 'true'
+        env:
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          FIRMAWARE_MODEL_VERSION: ${{ steps.model.outputs.version }}
+          FIRMAWARE_IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+        run: bash deploy/azure/smoke_test.sh dev "${{ steps.deploy.outputs.deployment }}"
+
+      - name: Promote traffic 10 -> 50 -> 100
+        if: steps.tf.outputs.endpoint_enabled == 'true'
+        env:
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          FIRMAWARE_MODEL_VERSION: ${{ steps.model.outputs.version }}
+        run: |
+          bash deploy/azure/promote_traffic.sh dev \
+            "${{ steps.deploy.outputs.deployment }}" \
+            "${{ steps.deploy.outputs.live_deployment }}"
+
+      # Runs last and still fails the job: a deploy that succeeded but left a
+      # control broken is a failed deploy.
+      - name: Security check
+        env:
+          AZURE_STORAGE_ACCOUNT: ${{ steps.tf.outputs.storage_account }}
+          AZURE_KEY_VAULT: ${{ steps.tf.outputs.key_vault }}
+          AZURE_ACR_NAME: ${{ steps.registry.outputs.name }}
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          FIRMAWARE_CICD_PRINCIPAL_ID: ${{ steps.tf.outputs.cicd_principal }}
+          FIRMAWARE_NETWORK_ISOLATION: "false"
+        run: bash deploy/azure/security_check.sh dev
+
+      - name: Record what is live
+        if: always()
+        run: |
+          {
+            echo "### Dev deployment"
+            echo "- image digest: \`${{ steps.build.outputs.image_digest }}\`"
+            echo "- model version: \`${{ steps.model.outputs.version || 'n/a' }}\`"
+            echo "- deployment slot: \`${{ steps.deploy.outputs.deployment || 'n/a' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,12 @@
+$schema: https://azuremlschemas.azureedge.net/latest/batchEndpoint.schema.json
+name: firmaware-batch-${{ENV}}
+description: >-
+  Scheduled bulk scoring. Same registered MLflow model version as the online
+  endpoint; writes one new append-only object per run to the scores container,
+  which carries a platform immutability policy.
+auth_mode: aad_token
+tags:
+  app: firmaware
+  env: ${{ENV}}
+  managed_by: terraform
+  data_classification: internal

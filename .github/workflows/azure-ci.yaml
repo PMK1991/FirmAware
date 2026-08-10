@@ -1,0 +1,157 @@
+name: CI (Azure)
+
+# Every gate that can run without touching Azure runs here, on every PR, and
+# every one of them blocks. Nothing is advisory: a check that warns is a check
+# that gets ignored, and the point of this file is that a change which would
+# weaken the deployed posture cannot reach main in the first place.
+
+on:
+  pull_request:
+    paths:
+      - "infra/azure/**"
+      - "deploy/azure/**"
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "Dockerfile"
+      - ".github/workflows/azure-*.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/azure/**"
+      - "deploy/azure/**"
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "Dockerfile"
+      - ".github/workflows/azure-*.yaml"
+
+# Read-only, and no id-token: this workflow must never be able to authenticate to
+# Azure. It runs on pull_request, which means it runs code from forks.
+permissions:
+  contents: read
+
+jobs:
+  application:
+    name: ruff + acceptance tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: python -m pip install --quiet -e ".[dev]"
+      - name: Ruff
+        run: ruff check src tests
+      # The pipeline-spec acceptance tests, unmodified. The Azure work is only
+      # allowed to add an abfss branch to io.py; if any of these break, it did
+      # more than that.
+      - name: Tests
+        run: python -m pytest -q
+
+  terraform:
+    name: fmt, validate, tflint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/azure
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.10.5"
+      - uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4.1.1
+        with:
+          tflint_version: "v0.54.0"
+      - name: Format
+        run: terraform fmt -check -recursive
+      # -backend=false: CI must be able to validate configuration without holding
+      # credentials for the state store.
+      - name: Init and validate
+        run: |
+          terraform init -backend=false
+          terraform validate
+      - name: TFLint
+        run: |
+          tflint --init
+          tflint --recursive --minimum-failure-severity=warning
+
+  infrastructure-security:
+    name: checkov + tfsec + gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Gitleaks needs history to scan the diff rather than just the tip.
+          fetch-depth: 0
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@33dbb953e9f9e28d92903b9c214f4072e6c7fd07 # v12.2969.0
+        with:
+          directory: infra/azure
+          framework: terraform
+          quiet: true
+          soft_fail: false
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
+        with:
+          working_directory: infra/azure
+          soft_fail: false
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@83373cf2f8c4db6e24b41c1a9b086bb9619e9cd3 # v2.3.7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  azureml-specs:
+    name: az ml schema + shell syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.13"
+      - name: Parse every Azure ML spec
+        run: |
+          python -m pip install --quiet pyyaml
+          python .github/scripts/check_azureml_specs.py
+      - name: Compile the scoring and component scripts
+        run: |
+          python -m compileall -q deploy/azure/azureml/score.py
+          python -m compileall -q deploy/azure/azureml/components/steps
+      # ShellCheck, not just `bash -n`: the release scripts are the things that
+      # run during an incident, and an unquoted variable there is a real outage.
+      - name: ShellCheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=warning deploy/azure/*.sh infra/azure/bootstrap.sh
+
+  container:
+    name: build + trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # Built, never pushed. A PR must not be able to put a layer in the registry
+      # that a later deploy could resolve.
+      - name: Build image
+        # Same extras AND the same target as the release build. Without both,
+        # the scan covers a different image than the one that ships: the Azure
+        # dependency surface -- azureml-mlflow, the ADLS client, the inference
+        # server and their transitive packages -- would never be scanned, and
+        # those are precisely the packages the GCP path never installs and
+        # nothing else covers.
+        run: |
+          docker build --platform linux/amd64 \
+            --build-arg PIP_EXTRAS=train,azure \
+            --target azureml \
+            -t firmaware:ci .
+      # Blocking on HIGH and CRITICAL is the compensating control for running a
+      # Basic registry in dev, where ACR quarantine is unavailable. It is not a
+      # nice-to-have; it is the only thing standing in that gap.
+      - name: Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: firmaware:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
