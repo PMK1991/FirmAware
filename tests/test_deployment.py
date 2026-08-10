@@ -22,7 +22,7 @@ class DeploymentTests(unittest.TestCase):
 
     def test_smoke_fixture_has_one_moxa_row_and_valid_scoring_contract(self) -> None:
         fixture = pd.read_csv(
-            ROOT / "deploy" / "fixtures" / "upcoming_smoke.csv"
+            ROOT / "deploy" / "gcp" / "fixtures" / "upcoming_smoke.csv"
         )
         validate(fixture, mode="scoring")
         self.assertEqual(len(fixture), 5)
@@ -30,7 +30,7 @@ class DeploymentTests(unittest.TestCase):
 
     def test_scores_role_can_create_and_read_but_not_delete(self) -> None:
         iam = (
-            ROOT / "infra" / "modules" / "iam" / "main.tf"
+            ROOT / "infra" / "gcp" / "modules" / "iam" / "main.tf"
         ).read_text(encoding="utf-8")
         scores_resource = iam.split(
             'resource "google_storage_bucket_iam_member" "jobs_scores_roles"'
@@ -43,7 +43,7 @@ class DeploymentTests(unittest.TestCase):
 
     def test_prod_promotes_successful_dev_digest_without_rebuild(self) -> None:
         workflow = (
-            ROOT / ".github" / "workflows" / "deploy-prod.yaml"
+            ROOT / ".github" / "workflows" / "gcp-deploy-prod.yaml"
         ).read_text(encoding="utf-8")
         self.assertIn("environment: production", workflow)
         self.assertIn("deployments/live.json", workflow)

@@ -1,4 +1,4 @@
-name: Promote prod
+name: Promote prod (GCP)
 
 on:
   push:
@@ -118,13 +118,13 @@ jobs:
 
       - name: Terraform init
         run: >-
-          terraform -chdir=infra init
+          terraform -chdir=infra/gcp init
           -backend-config="bucket=${PROD_TF_STATE_BUCKET}"
           -backend-config="prefix=firmaware/prod"
 
       - name: Terraform plan with scheduler paused
         run: >-
-          terraform -chdir=infra plan
+          terraform -chdir=infra/gcp plan
           -var-file=envs/prod.tfvars
           -var="project_id=${PROD_GCP_PROJECT_ID}"
           -var="state_bucket_name=${PROD_TF_STATE_BUCKET}"
@@ -135,25 +135,25 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: firmaware-prod-terraform-plan
-          path: infra/prod.tfplan
+          path: infra/gcp/prod.tfplan
           retention-days: 90
 
       - name: Apply candidate with schedule paused
-        run: terraform -chdir=infra apply -auto-approve prod.tfplan
+        run: terraform -chdir=infra/gcp apply -auto-approve prod.tfplan
 
       - id: validate
         name: Validate production data
         continue-on-error: true
         env:
           GCP_PROJECT_ID: ${{ vars.PROD_GCP_PROJECT_ID }}
-        run: bash deploy/run_job.sh validate prod
+        run: bash deploy/gcp/run_job.sh validate prod
 
       - id: smoke
         name: Smoke test
         continue-on-error: true
         env:
           GCP_PROJECT_ID: ${{ vars.PROD_GCP_PROJECT_ID }}
-        run: bash deploy/smoke_test.sh prod
+        run: bash deploy/gcp/smoke_test.sh prod
 
       - name: Roll back failed candidate
         if: >-
@@ -162,7 +162,7 @@ jobs:
         env:
           PROD_GCP_PROJECT_ID: ${{ vars.PROD_GCP_PROJECT_ID }}
           PROD_TF_STATE_BUCKET: ${{ vars.PROD_TF_STATE_BUCKET }}
-        run: bash deploy/rollback_image.sh prod "${{ steps.previous-image.outputs.image }}"
+        run: bash deploy/gcp/rollback_image.sh prod "${{ steps.previous-image.outputs.image }}"
 
       - name: Fail rejected candidate
         if: steps.validate.outcome != 'success' || steps.smoke.outcome != 'success'
@@ -172,7 +172,7 @@ jobs:
 
       - name: Activate nightly schedule
         run: >-
-          terraform -chdir=infra apply -auto-approve
+          terraform -chdir=infra/gcp apply -auto-approve
           -var-file=envs/prod.tfvars
           -var="project_id=${PROD_GCP_PROJECT_ID}"
           -var="state_bucket_name=${PROD_TF_STATE_BUCKET}"

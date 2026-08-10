@@ -1,0 +1,31 @@
+name: CI (GCP infrastructure)
+
+on:
+  pull_request:
+    paths: ["infra/gcp/**", "deploy/gcp/**", ".github/workflows/gcp-*.yaml"]
+  push:
+    branches: [main]
+    paths: ["infra/gcp/**", "deploy/gcp/**", ".github/workflows/gcp-*.yaml"]
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/gcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.55.1
+      - run: tflint --init
+      - run: tflint --recursive

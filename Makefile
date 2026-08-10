@@ -34,4 +34,4 @@ train-local: build
 		$(IMAGE) train
 
 deploy-dev:
-	gh workflow run deploy-dev.yaml
+	gh workflow run gcp-deploy-dev.yaml
