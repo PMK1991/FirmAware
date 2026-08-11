@@ -21,7 +21,7 @@ module "storage" {
   region             = var.region
   env                = var.env
   labels             = local.labels
-  smoke_fixture_path = "${path.module}/../deploy/fixtures/upcoming_smoke.csv"
+  smoke_fixture_path = "${path.module}/../../deploy/gcp/fixtures/upcoming_smoke.csv"
 
   depends_on = [module.foundation]
 }

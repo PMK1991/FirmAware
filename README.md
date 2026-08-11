@@ -30,7 +30,7 @@ follows the same order the pipeline runs in: what the decision is, how the syste
 is designed, how to run it, how it reaches the cloud, and how it is displayed.
 
 The GCP batch deployment, Terraform modules, keyless CI/CD, smoke tests, and
-rollback runbook are documented in [`infra/README.md`](infra/README.md).
+rollback runbook are documented in [`infra/gcp/README.md`](infra/gcp/README.md).
 The exploratory-to-deployment notebook workflow is documented in
 [`notebooks/README.md`](notebooks/README.md).
 
@@ -238,6 +238,25 @@ The fixed transformation order is **impute → encode → align → scale**. Ali
 occurs before scaling so a missing raw feature is filled in raw space rather
 than injecting zero into standardized space.
 
+### Repository layout by cloud
+
+Cloud-specific assets are split per provider; the application is not.
+
+```
+src/firmaware/        shared, cloud-agnostic - one image runs on both clouds
+infra/gcp/            Terraform: Cloud Run Jobs, GCS, Artifact Registry, WIF
+infra/azure/          Terraform: Azure ML workspace, endpoints, ADLS, ACR, policy
+deploy/gcp/           job runner, build, smoke test, rollback scripts
+deploy/azure/         training submit, traffic promotion, rollback, security check,
+                      and the Azure ML job/endpoint YAML plus score.py
+.github/workflows/    ci.yaml (shared app) + gcp-*.yaml + azure-*.yaml
+```
+
+`src/firmaware/` stays shared deliberately: no module imports a cloud SDK, and
+the storage shim resolves `gs://`, `abfss://`, or a local path lazily. Splitting
+the package per cloud would break the portability the whole design rests on, so
+the only cloud-specific code lives under `deploy/<cloud>/`.
+
 ### Deployment topology
 
 ```mermaid
@@ -281,7 +300,7 @@ platforms.
 
 The table above is the portable design. These two diagrams are the concrete
 deployment live in project `firmaware` (`us-central1`, `dev`), taken from
-`infra/` and `.github/workflows/`. The editable source is
+`infra/gcp/` and `.github/workflows/gcp-*.yaml`. The editable source is
 [`docs/architecture/firmaware-gcp-architecture.drawio`](docs/architecture/firmaware-gcp-architecture.drawio);
 re-export the PNGs whenever it changes.
 
@@ -295,6 +314,74 @@ GitHub authenticates without a stored key, then a candidate is applied with the
 scheduler paused and proven against real data before the schedule resumes.
 
 ![GCP CI/CD architecture](docs/images/gcp-cicd-architecture.png)
+
+### Azure ML architecture
+
+Both clouds are deployed. Azure resolves one question differently: on GCP the
+champion pointer (`champion.json`) exists to make rollback a pointer rewrite.
+Azure ML supplies that natively and better — **model versions in the registry
+plus blue/green deployments behind one endpoint** — so the pointer retires and
+rollback becomes a traffic shift. The editable source is
+[`docs/architecture/firmaware-azure-architecture.drawio`](docs/architecture/firmaware-azure-architecture.drawio);
+the full design is [`docs/design/azure-architecture.md`](docs/design/azure-architecture.md),
+and the deployment notes are in [`infra/azure/README.md`](infra/azure/README.md).
+
+```mermaid
+flowchart LR
+    subgraph CI["CI / CD"]
+        GH[GitHub Actions<br/>OIDC keyless] --> ACR[Container Registry<br/>by digest]
+    end
+
+    subgraph AML["Azure ML workspace"]
+        DA[Data assets<br/>versioned] --> PIPE[Pipeline job:<br/>validate → features →<br/>train → evaluate + gate]
+        PIPE -->|register on pass| MR[Model Registry<br/>versions + tags]
+        MLF[MLflow tracking<br/>native]
+    end
+
+    subgraph INF["Inference"]
+        MR --> GREEN[Deployment green<br/>model v n]
+        MR --> BATCH[Batch endpoint<br/>scheduled]
+        GREEN --- EP[Managed Online Endpoint]
+        BLUE[Deployment blue<br/>model v n-1] --- EP
+    end
+
+    ADLS[(ADLS Gen2<br/>data)] --> DA
+    BATCH --> SCORES[(ADLS Gen2<br/>scores — append-only)]
+    GH --> EP
+    ACR --> PIPE
+    EP --> COLLECT[Inference data collection]
+    COLLECT --> MON[Model monitoring — drift]
+```
+
+Two consequences follow, and both are architectural rather than cosmetic.
+
+**FirmAware gains real-time inference.** The GCP deployment is batch-only by
+design. A Managed Online Endpoint scores a single upcoming deployment
+synchronously over HTTPS, while the nightly bulk path becomes a Batch Endpoint —
+one registered model, two scoring surfaces. `score.py` runs the same validation,
+derivation, and `Preprocessor` code as the batch path, returns
+`unseen_categories` in the response body, and answers a contract violation with
+**HTTP 422 naming the violation** rather than a success-shaped default.
+
+**Inference data collection closes a gap the batch design could not.** Every
+served prediction is durably recorded with its model version, which is the
+prerequisite for joining recommendations against real outcomes later.
+
+| Concern | Deployed on GCP | Designed for Azure |
+|---|---|---|
+| Training | Cloud Run Job | Azure ML pipeline job on a scale-to-zero cluster |
+| Model store | `champion.json` in GCS | Model Registry versions + tags |
+| Real-time scoring | not built | Managed Online Endpoint, blue/green traffic split |
+| Bulk scoring | Cloud Run Job on Cloud Scheduler | Batch Endpoint |
+| Tracking | none deployed; GCS is the record | native MLflow in the workspace |
+| Identity | Workload Identity Federation | User-assigned managed identity |
+| Model rollback | rewrite pointer, under 2 min | traffic shift `blue=100 green=0`, **under 30 s** |
+
+Preserved across both clouds: deploy by immutable digest, append-only scores,
+the data contract enforced inside the application, training as a manual act, and
+no user-managed keys. Portability holds because `schema.py`, `features.py`,
+`transform.py`, and the contract tests import no cloud SDK — only orchestration
+and promotion mechanics differ.
 
 ### Reliability, security, and operational controls
 
@@ -451,14 +538,20 @@ python -m firmaware train --input data\deployment_events.csv --config config.yam
 For **Azure ML**, install `azureml-mlflow` in the Azure job image and set
 `MLFLOW_TRACKING_URI` to the workspace MLflow tracking URI. Azure identity
 supplies authentication; the run, artifacts, and registered PyFunc model are
-published to the workspace.
+published to the workspace. Because the same PyFunc packages validation,
+preprocessing, and decision generation, that registered version is what a
+Managed Online Endpoint deployment serves — no separate serving artifact and no
+second preprocessing path. The full target design, including blue/green
+promotion, batch endpoints, inference data collection, and the five rollback
+classes, is in [`docs/design/azure-architecture.md`](docs/design/azure-architecture.md)
+and summarised under [Azure ML target architecture](#azure-ml-target-architecture).
 
 For **GCP batch deployment**, FirmAware lazily imports `google-cloud-storage`
 only for `gs://` URIs. Cloud Run Jobs read inputs from GCS, publish immutable
 model runs plus `champion.json`, and create one new score object per execution.
 The Cloud deployment intentionally has no MLflow server: GCS metadata is its
 system of record, while the local SQLite MLflow store remains available for
-development. See [`infra/README.md`](infra/README.md) and the
+development. See [`infra/gcp/README.md`](infra/gcp/README.md) and the
 [deployed GCP architecture diagrams](#deployed-gcp-architecture).
 
 When tracking through a remote HTTP or managed endpoint, FirmAware leaves

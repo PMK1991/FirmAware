@@ -1,0 +1,31 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+
+name: firmaware_register
+display_name: register
+version: "1"
+description: >-
+  Creates the registry version and tags it with git SHA, image digest, data asset
+  version, threshold, cost ratio and every test metric. Reachable only through a
+  passing gate, and it re-reads gate.json before writing because a registry
+  version cannot be un-created.
+
+inputs:
+  model_dir:
+    type: uri_folder
+  evaluation:
+    type: uri_folder
+
+outputs:
+  registration:
+    type: uri_folder
+    description: registration.json -- the version and tags the deploy step consumes.
+
+code: ./steps
+environment: azureml:firmaware-env@latest
+
+command: >-
+  python register_step.py
+  --model-dir ${{inputs.model_dir}}
+  --evaluation ${{inputs.evaluation}}
+  --registration ${{outputs.registration}}

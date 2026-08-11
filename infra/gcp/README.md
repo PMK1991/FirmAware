@@ -1,5 +1,9 @@
 # FirmAware GCP deployment
 
+Terraform root for the GCP target. The Azure target lives in
+[`../azure`](../azure) and has separate state; the two share no modules by
+design. Scripts referenced below live in `deploy/gcp/`.
+
 This directory deploys the batch-only FirmAware pipeline as three Cloud Run
 Jobs. Terraform owns all resources except the remote-state bucket and Workload
 Identity Pool, which `bootstrap.sh` creates idempotently.
@@ -80,7 +84,7 @@ export GCP_PROJECT_ID="$DEV_GCP_PROJECT_ID"
 # Bucket names are globally unique; the project number keeps this collision-free.
 project_number="$(gcloud projects describe "$DEV_GCP_PROJECT_ID" --format='value(projectNumber)')"
 export TF_STATE_BUCKET="${DEV_GCP_PROJECT_ID}-${project_number}-tf-state"
-bash infra/bootstrap.sh "$DEV_GCP_PROJECT_ID" PMK1991 FirmAware
+bash infra/gcp/bootstrap.sh "$DEV_GCP_PROJECT_ID" PMK1991 FirmAware
 ```
 
 The pool is external to Terraform. Terraform creates the repo-scoped provider,
@@ -104,7 +108,7 @@ terraform -chdir=infra apply \
   -var="state_bucket_name=$TF_STATE_BUCKET"
 
 export GCP_PROJECT_ID="$DEV_GCP_PROJECT_ID"
-image_digest="$(bash deploy/build.sh dev | sed -n 's/^image_digest=//p')"
+image_digest="$(bash deploy/gcp/build.sh dev | sed -n 's/^image_digest=//p')"
 
 terraform -chdir=infra apply \
   -var-file=envs/dev.tfvars \
@@ -120,9 +124,9 @@ gcloud storage cp data/deployment_events.csv \
   "gs://firmaware-dev-data/deployment_events.csv"
 gcloud storage cp data/upcoming_deployments.csv \
   "gs://firmaware-dev-data/upcoming_deployments.csv"
-bash deploy/run_job.sh validate dev
-bash deploy/run_job.sh train dev
-bash deploy/smoke_test.sh dev
+bash deploy/gcp/run_job.sh validate dev
+bash deploy/gcp/run_job.sh train dev
+bash deploy/gcp/smoke_test.sh dev
 ```
 
 The first prod baseline is deliberate because an automated smoke test needs a
@@ -181,10 +185,10 @@ the `production` environment. Do not create or add JSON keys to GitHub secrets.
 ## Operations
 
 ```bash
-bash deploy/run_job.sh validate dev
-bash deploy/run_job.sh train dev
-bash deploy/run_job.sh predict dev
-bash deploy/smoke_test.sh dev
+bash deploy/gcp/run_job.sh validate dev
+bash deploy/gcp/run_job.sh train dev
+bash deploy/gcp/run_job.sh predict dev
+bash deploy/gcp/smoke_test.sh dev
 ```
 
 Training is never triggered by a merge. It is a separate audited operation
@@ -206,14 +210,14 @@ sequence.
 List immutable runs:
 
 ```bash
-bash deploy/rollback_model.sh dev
+bash deploy/gcp/rollback_model.sh dev
 ```
 
 Promote a prior run with a generation precondition on `champion.json`:
 
 ```bash
-bash deploy/rollback_model.sh dev RUN_ID
-bash deploy/run_job.sh predict dev
+bash deploy/gcp/rollback_model.sh dev RUN_ID
+bash deploy/gcp/run_job.sh predict dev
 ```
 
 Target: under 2 minutes. Verify the new score object's `model_run` matches the
@@ -226,7 +230,7 @@ Use a prior digest from a successful deploy summary or the table below:
 ```bash
 export DEV_GCP_PROJECT_ID=...
 export DEV_TF_STATE_BUCKET=...
-bash deploy/rollback_image.sh dev \
+bash deploy/gcp/rollback_image.sh dev \
   us-central1-docker.pkg.dev/PROJECT/firmaware/firmaware@sha256:DIGEST
 ```
 
@@ -255,7 +259,7 @@ gcloud storage cp \
   gs://firmaware-dev-data/deployment_events.csv#GENERATION \
   gs://firmaware-dev-data/deployment_events.csv \
   --if-generation-match="$current_generation"
-bash deploy/run_job.sh validate dev
+bash deploy/gcp/run_job.sh validate dev
 ```
 
 Target: under 10 minutes.

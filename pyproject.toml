@@ -32,11 +32,47 @@ train = [
   "numpy==1.26.4",
   "scikit-learn==1.6.1",
   "xgboost==3.0.5",
-  "mlflow==3.14.0",
+  # MLflow 2, not 3, and this is a hard Azure constraint rather than caution.
+  # Azure ML's hosted tracking server implements the MLflow 2 REST surface: it
+  # has no /api/2.0/mlflow/logged-models. MLflow 3's Model.log() calls
+  # _create_logged_model unconditionally -- there is no flag, env var or
+  # fallback -- so every log_model against an AML workspace dies on a 404 after
+  # training has already finished. azureml-mlflow only caps (mlflow-skinny
+  # <=3.13.0) and sets no floor, so 2.x satisfies it.
+  #
+  # Still one version in every environment, which is the point: local, GCP and
+  # AML must agree, and AML is the one that cannot move. The code already uses
+  # the log_model(artifact_path=...) idiom that MLflow 3 deprecates, so nothing
+  # here depends on a 3.x API.
+  "mlflow==2.22.5",
 ]
 app = [
   "streamlit==1.51.0",
   "plotly==6.4.0",
+]
+# Azure's storage SDK is optional for the same reason google-cloud-storage is
+# not: io.py imports it lazily, so only a deployment that actually reads
+# abfss:// pays for it. The Azure ML image installs this extra; the Streamlit
+# page and the GCP jobs never do.
+#
+# azureml-mlflow and azureml-inference-server-http are here rather than in an
+# AML conda_file because the runtime image is python:3.11-slim, which has no
+# conda: a conda_file layered onto it cannot build. Putting them in the image
+# also keeps the deployed artefact the thing that was tested, instead of
+# something AML assembles at deploy time.
+azure = [
+  "azure-identity>=1.17,<2",
+  "azure-storage-file-datalake>=12.16,<13",
+  # Redirects the application's existing MLflow calls at the workspace tracking
+  # store without any application code change. Pinned exactly: an open range
+  # lets the resolver backtrack to a 1.5x release that also caps
+  # azure-storage-blob below what the datalake client needs, producing an
+  # unsolvable set rather than an older install.
+  "azureml-mlflow==1.62.0.post5",
+  # Managed online endpoints run the scoring script under this server. Without
+  # it in the image, a custom-image deployment with a scoring_script fails to
+  # start.
+  "azureml-inference-server-http>=1.0,<2",
 ]
 dev = [
   "pytest>=8.0,<9",

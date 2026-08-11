@@ -1,0 +1,23 @@
+$schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
+name: firmaware-env
+description: >-
+  FirmAware runtime. Wraps the same image the GCP Cloud Run Jobs use, referenced
+  by immutable digest. azureml-mlflow is the only Azure-specific addition: it
+  redirects the application's existing MLflow calls to the workspace tracking
+  store without changing application code.
+image: ${{ACR_LOGIN_SERVER}}/firmaware@${{IMAGE_DIGEST}}
+# No conda_file. The image is python:3.11-slim and has no conda, so a conda
+# layer cannot build on it; the Azure-side packages are installed into the image
+# instead via the `azure` extra (see the PIP_EXTRAS build arg in Dockerfile).
+# This also means the environment adds nothing to what was built and scanned --
+# the deployed artefact is exactly the tested one.
+inference_config:
+  liveness_route:
+    path: /
+    port: 5001
+  readiness_route:
+    path: /
+    port: 5001
+  scoring_route:
+    path: /score
+    port: 5001

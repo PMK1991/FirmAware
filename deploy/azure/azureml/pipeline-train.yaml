@@ -1,0 +1,106 @@
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+display_name: firmaware-train
+description: >-
+  validate -> features -> train -> evaluate+gate -> register.
+  Submitted manually or by dispatched workflow, never on merge: training changes
+  model behaviour without changing code, so it gets its own approval trail rather
+  than riding along with a code deploy.
+
+experiment_name: firmaware
+settings:
+  default_compute: azureml:firmaware-cluster
+  # A failed gate must stop the pipeline, not let register run anyway.
+  continue_on_step_failure: false
+
+inputs:
+  # Versioned data asset, never a raw path: the run records exactly which data
+  # version produced the model, and register tags the version with it.
+  deployment_events:
+    type: uri_file
+    path: azureml:firmaware-deployment-events@latest
+  config:
+    type: uri_file
+    path: azureml:firmaware-config@latest
+
+  # Provenance supplied by run_training.sh. Declared as inputs rather than read
+  # from the runner's environment so they are recorded on the job itself and a
+  # resubmitted run cannot silently pick up different values.
+  git_sha:
+    type: string
+    default: unknown
+  image_digest:
+    type: string
+    default: unknown
+  data_asset_version:
+    type: string
+    default: unknown
+
+outputs:
+  model_dir:
+    type: uri_folder
+  evaluation:
+    type: uri_folder
+  registration:
+    type: uri_folder
+
+jobs:
+  # Fails closed on an out-of-vocabulary deployment_outcome, and publishes the
+  # rows only if it passed. Everything below reads that output.
+  validate:
+    type: command
+    component: ./components/validate.yaml
+    inputs:
+      data: ${{parent.inputs.deployment_events}}
+
+  features:
+    type: command
+    component: ./components/features.yaml
+    inputs:
+      data: ${{parent.jobs.validate.outputs.validated}}
+
+  train:
+    type: command
+    component: ./components/train.yaml
+    inputs:
+      dataset: ${{parent.jobs.features.outputs.dataset}}
+      config: ${{parent.inputs.config}}
+    outputs:
+      model_dir: ${{parent.outputs.model_dir}}
+    environment_variables:
+      # No MLFLOW_TRACKING_URI here. Azure ML injects it into every job whose
+      # environment has azureml-mlflow installed, and `${{workspace.*}}` is not
+      # a binding the pipeline schema accepts -- only parent.inputs,
+      # parent.jobs.*.outputs and parent.outputs resolve. The application makes
+      # the same MLflow calls it makes locally; only the injected URI differs,
+      # which is the whole portability claim.
+      MLFLOW_EXPERIMENT_NAME: firmaware
+      FIRMAWARE_REGISTERED_MODEL_NAME: FirmAwareRiskModel
+
+  evaluate:
+    type: command
+    component: ./components/evaluate.yaml
+    inputs:
+      model_dir: ${{parent.jobs.train.outputs.model_dir}}
+      features: ${{parent.jobs.features.outputs.features}}
+    outputs:
+      evaluation: ${{parent.outputs.evaluation}}
+    environment_variables:
+      # Reads the incumbent version's metrics off the registry: the baseline is
+      # whatever is already registered, not a number in a file. The tracking URI
+      # is injected by Azure ML, as in the train step.
+      FIRMAWARE_REGISTERED_MODEL_NAME: FirmAwareRiskModel
+
+  register:
+    type: command
+    component: ./components/register.yaml
+    inputs:
+      model_dir: ${{parent.jobs.train.outputs.model_dir}}
+      evaluation: ${{parent.jobs.evaluate.outputs.evaluation}}
+    outputs:
+      registration: ${{parent.outputs.registration}}
+    environment_variables:
+      FIRMAWARE_REGISTERED_MODEL_NAME: FirmAwareRiskModel
+      GIT_SHA: ${{parent.inputs.git_sha}}
+      IMAGE_DIGEST: ${{parent.inputs.image_digest}}
+      DATA_ASSET_VERSION: ${{parent.inputs.data_asset_version}}

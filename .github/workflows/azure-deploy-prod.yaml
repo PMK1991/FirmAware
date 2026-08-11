@@ -1,0 +1,316 @@
+name: Deploy prod (Azure)
+
+# Promotes an artifact that is already serving dev. It does not build one.
+#
+# The digest is an input, and the first job verifies that this exact digest is
+# what dev is currently running. That is what makes this a promotion rather than
+# a second, unverified build: a rebuild from the same commit can differ (base
+# image moved, a transitive pin resolved differently), so "same commit" is not
+# the same guarantee as "same bytes".
+#
+# Prod additionally requires a human. The `prod` environment carries required
+# reviewers, so this workflow pauses before the deploy job until someone with
+# authority approves it.
+
+on:
+  # The spec's trigger: tagging a release promotes what dev is serving. On this
+  # path the digest is not supplied by a human at all, it is read from the dev
+  # endpoint, which is the strongest possible form of "promote what was tested".
+  push:
+    tags:
+      - "v*"
+  # The manual path exists for a targeted re-promotion or a roll-forward to a
+  # specific version. Here the digest IS supplied, so it is checked against dev
+  # rather than derived from it.
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: "Full image reference including @sha256: digest, as deployed to dev"
+        required: true
+        type: string
+      model_version:
+        description: "Registered model version to promote"
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: azure-deploy-prod
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: rg-firmaware-prod
+  TF_VAR_FILE: envs/prod.tfvars
+
+jobs:
+  # Deliberately a separate job with the dev environment's credentials. It runs
+  # before any approval so a reviewer is never asked to approve a promotion that
+  # was already going to fail its provenance check.
+  verify-dev-provenance:
+    runs-on: ubuntu-latest
+    environment: dev
+    outputs:
+      image_digest: ${{ steps.resolve.outputs.image_digest }}
+      model_version: ${{ steps.resolve.outputs.model_version }}
+      source: ${{ steps.resolve.outputs.source }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Azure login (OIDC)
+        uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install az ml extension
+        run: az extension add --name ml --yes --allow-preview false
+
+      # On a tag the digest is READ from dev; on a manual run it is SUPPLIED and
+      # then checked against dev. Both paths end with a digest that dev is
+      # provably serving, which is the property the spec actually requires.
+      - name: Resolve and verify the digest against dev
+        id: resolve
+        env:
+          REQUESTED: ${{ inputs.image_digest }}
+          REQUESTED_MODEL: ${{ inputs.model_version }}
+          DEV_RESOURCE_GROUP: rg-firmaware-dev
+          DEV_WORKSPACE: mlw-firmaware-dev
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${REQUESTED}" && "${REQUESTED}" != *"@sha256:"* ]]; then
+            echo "::error::refusing to promote a mutable tag: ${REQUESTED}" >&2
+            echo "prod deploys by digest so the artifact cannot change after approval" >&2
+            exit 1
+          fi
+
+          endpoint="$(az ml online-endpoint list \
+            --workspace-name "${DEV_WORKSPACE}" \
+            --resource-group "${DEV_RESOURCE_GROUP}" \
+            --query "[?starts_with(name,'firmaware')].name | [0]" -o tsv 2>/dev/null || true)"
+
+          if [[ -n "${endpoint}" ]]; then
+            # Every slot carrying traffic, not one named slot: during a partial
+            # promotion two slots are live and only one is the candidate.
+            serving="$(az ml online-endpoint show \
+              --name "${endpoint}" \
+              --workspace-name "${DEV_WORKSPACE}" \
+              --resource-group "${DEV_RESOURCE_GROUP}" \
+              --query "traffic" -o json \
+              | python3 -c "import json,sys;print('\n'.join(k for k,v in json.load(sys.stdin).items() if int(v)>0))")"
+            [[ -n "${serving}" ]] || { echo "::error::dev endpoint serves no traffic" >&2; exit 1; }
+
+            live_digest=""
+            live_model=""
+            while read -r slot; do
+              [[ -n "${slot}" ]] || continue
+              # deploy_endpoint.sh stamps both onto the deployment as tags, which
+              # is the only place the running artifact is recorded verbatim.
+              read -r slot_digest slot_model <<< "$(az ml online-deployment show \
+                --name "${slot}" \
+                --endpoint-name "${endpoint}" \
+                --workspace-name "${DEV_WORKSPACE}" \
+                --resource-group "${DEV_RESOURCE_GROUP}" \
+                --query "[tags.image_digest, tags.model_version]" -o tsv 2>/dev/null || echo "")"
+              echo "dev slot ${slot}: digest=${slot_digest:-<unknown>} model=${slot_model:-<unknown>}"
+              if [[ -z "${REQUESTED}" || "${slot_digest}" == "${REQUESTED}" ]]; then
+                live_digest="${slot_digest}"
+                live_model="${slot_model}"
+              fi
+            done <<< "${serving}"
+
+            if [[ -z "${live_digest}" ]]; then
+              echo "::error::${REQUESTED} is not serving traffic in dev; refusing to promote" >&2
+              exit 1
+            fi
+            resolved_digest="${live_digest}"
+            resolved_model="${REQUESTED_MODEL:-${live_model}}"
+            source="dev online endpoint ${endpoint}"
+          else
+            # Dev runs without an online endpoint to avoid the standing cost of a
+            # managed endpoint that cannot scale to zero, so there is no live
+            # slot to read. A digest must then be supplied explicitly, and it is
+            # verified to exist in the dev registry rather than merely asserted.
+            echo "::warning::dev has no online endpoint; verifying against the dev registry instead"
+            if [[ -z "${REQUESTED}" ]]; then
+              echo "::error::dev has no online endpoint, so a tag cannot infer what dev is serving." >&2
+              echo "Re-run this workflow manually with an explicit image_digest and model_version." >&2
+              exit 1
+            fi
+            acr="$(az acr list -g "${DEV_RESOURCE_GROUP}" --query "[0].name" -o tsv)"
+            repo="${REQUESTED%%@*}"; repo="${repo#*.azurecr.io/}"
+            digest="${REQUESTED##*@}"
+            az acr repository show --name "${acr}" --image "${repo}@${digest}" \
+              --query digest -o tsv > /dev/null
+            resolved_digest="${REQUESTED}"
+            resolved_model="${REQUESTED_MODEL}"
+            source="dev registry ${acr}"
+            [[ -n "${resolved_model}" ]] || { echo "::error::model_version is required" >&2; exit 1; }
+          fi
+
+          echo "verified: ${resolved_digest} (model ${resolved_model}) via ${source}"
+          {
+            echo "image_digest=${resolved_digest}"
+            echo "model_version=${resolved_model}"
+            echo "source=${source}"
+          } >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: verify-dev-provenance
+    runs-on: ubuntu-latest
+    # Required reviewers live on this environment, and its name is also what
+    # lands in the OIDC subject claim, so it must match github_environment in
+    # envs/prod.tfvars. The job blocks here until a reviewer approves.
+    environment: production
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.13"
+
+      - name: Azure login (OIDC)
+        uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install az ml extension
+        run: az extension add --name ml --yes --allow-preview false
+
+      - name: Import the approved digest into the prod registry
+        id: image
+        env:
+          SOURCE: ${{ needs.verify-dev-provenance.outputs.image_digest }}
+        run: |
+          set -euo pipefail
+          acr="$(az acr list -g "${AZURE_RESOURCE_GROUP}" --query "[0].name" -o tsv)"
+          login_server="$(az acr show -n "${acr}" --query loginServer -o tsv)"
+          repo_and_digest="${SOURCE#*.azurecr.io/}"
+          repo="${repo_and_digest%%@*}"
+          digest="${SOURCE##*@}"
+
+          # --force is safe because the target is content-addressed: importing the
+          # same digest twice writes identical bytes.
+          az acr import \
+            --name "${acr}" \
+            --source "${SOURCE}" \
+            --image "${repo}@${digest}" \
+            --force
+
+          echo "reference=${login_server}/${repo}@${digest}" >> "$GITHUB_OUTPUT"
+          echo "acr=${acr}" >> "$GITHUB_OUTPUT"
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.10.5"
+
+      - name: Terraform init
+        working-directory: infra/azure
+        run: terraform init -backend-config=envs/prod.backend.hcl
+
+      - name: Terraform plan
+        working-directory: infra/azure
+        run: |
+          terraform plan -var-file="${TF_VAR_FILE}" -out=tfplan -no-color | tee plan.txt
+          {
+            echo "### Terraform plan (prod)"
+            echo '```'
+            tail -n 100 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Terraform apply
+        working-directory: infra/azure
+        run: terraform apply -auto-approve tfplan
+
+      - name: Read Terraform outputs
+        id: tf
+        working-directory: infra/azure
+        run: |
+          {
+            echo "storage_account=$(terraform output -raw storage_account_name)"
+            echo "key_vault=$(terraform output -raw key_vault_name)"
+            echo "workspace=$(terraform output -raw machine_learning_workspace_name)"
+            echo "instance_type=$(terraform output -raw online_instance_type)"
+            echo "min_instances=$(terraform output -raw online_min_instances)"
+            echo "cicd_principal=$(terraform output -raw cicd_identity_principal_id)"
+          } >> "$GITHUB_OUTPUT"
+
+      # Registered before the deployment that references it. The environment
+      # pins the imported prod digest, so the deployment cannot resolve
+      # `firmaware-env@latest` to an image built from a different commit.
+      - name: Register AML environment and data assets
+        env:
+          AZURE_ACR_NAME: ${{ steps.image.outputs.acr }}
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          AZURE_STORAGE_ACCOUNT: ${{ steps.tf.outputs.storage_account }}
+          FIRMAWARE_IMAGE_DIGEST: ${{ steps.image.outputs.reference }}
+        run: bash deploy/azure/register_assets.sh prod
+
+      - name: Deploy into the idle slot at 0% traffic
+        id: deploy
+        env:
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          FIRMAWARE_INSTANCE_TYPE: ${{ steps.tf.outputs.instance_type }}
+          FIRMAWARE_MIN_INSTANCES: ${{ steps.tf.outputs.min_instances }}
+        run: |
+          bash deploy/azure/deploy_endpoint.sh prod \
+            "${{ needs.verify-dev-provenance.outputs.model_version }}" \
+            "${{ steps.image.outputs.reference }}"
+
+      - name: Smoke test the new slot
+        env:
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          FIRMAWARE_MODEL_VERSION: ${{ needs.verify-dev-provenance.outputs.model_version }}
+          FIRMAWARE_IMAGE_DIGEST: ${{ steps.image.outputs.reference }}
+        run: bash deploy/azure/smoke_test.sh prod "${{ steps.deploy.outputs.deployment }}"
+
+      - name: Promote traffic 10 -> 50 -> 100
+        env:
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          FIRMAWARE_MODEL_VERSION: ${{ needs.verify-dev-provenance.outputs.model_version }}
+        run: |
+          bash deploy/azure/promote_traffic.sh prod \
+            "${{ steps.deploy.outputs.deployment }}" \
+            "${{ steps.deploy.outputs.live_deployment }}"
+
+      # Traffic already moved, so an automated revert here is the fastest correct
+      # response. promote_traffic.sh reverts within its own run; this catches a
+      # failure in any later step.
+      - name: Roll back on failure
+        if: failure() && steps.deploy.outcome == 'success'
+        env:
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+        run: |
+          bash deploy/azure/rollback_endpoint.sh prod \
+            "${{ steps.deploy.outputs.live_deployment }}"
+
+      - name: Security check
+        env:
+          AZURE_STORAGE_ACCOUNT: ${{ steps.tf.outputs.storage_account }}
+          AZURE_KEY_VAULT: ${{ steps.tf.outputs.key_vault }}
+          AZURE_ACR_NAME: ${{ steps.image.outputs.acr }}
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          FIRMAWARE_CICD_PRINCIPAL_ID: ${{ steps.tf.outputs.cicd_principal }}
+          FIRMAWARE_NETWORK_ISOLATION: "true"
+        run: bash deploy/azure/security_check.sh prod
+
+      - name: Record what is live
+        if: always()
+        run: |
+          {
+            echo "### Prod promotion"
+            echo "- release: \`${{ github.ref_name }}\` (${{ github.event_name }})"
+            echo "- promoted digest: \`${{ needs.verify-dev-provenance.outputs.image_digest }}\`"
+            echo "- provenance: ${{ needs.verify-dev-provenance.outputs.source }}"
+            echo "- prod reference: \`${{ steps.image.outputs.reference }}\`"
+            echo "- model version: \`${{ needs.verify-dev-provenance.outputs.model_version }}\`"
+            echo "- deployment slot: \`${{ steps.deploy.outputs.deployment || 'n/a' }}\`"
+            echo "- approved by: \`${{ github.actor }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

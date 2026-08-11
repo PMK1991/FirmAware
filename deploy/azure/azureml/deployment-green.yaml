@@ -1,0 +1,65 @@
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+name: green
+endpoint_name: firmaware-score-${{ENV}}
+
+# The registered MLflow model. Deploying models:/ means the served artefact is
+# the same PyFunc that training registered: validation, preprocessing, scoring,
+# and decision generation in one package, with no second preprocessing path.
+model: azureml:FirmAwareRiskModel:${{MODEL_VERSION}}
+
+environment: azureml:firmaware-env@latest
+code_configuration:
+  # `.` is this directory, which is where score.py lives. `../` would upload
+  # deploy/azure and resolve the scoring script to a path that does not exist.
+  code: .
+  scoring_script: score.py
+
+instance_type: ${{INSTANCE_TYPE}}
+instance_count: 1
+
+request_settings:
+  request_timeout_ms: 20000
+  max_concurrent_requests_per_instance: 4
+
+liveness_probe:
+  initial_delay: 30
+  period: 10
+  failure_threshold: 3
+
+scale_settings:
+  type: target_utilization
+  min_instances: ${{MIN_INSTANCES}}   # 1 in prod (no cold start), 0 in dev
+  max_instances: 3
+  target_utilization_percentage: 70
+
+egress_public_network_access: disabled
+
+# Every served prediction is recorded with its model version. This is the
+# prerequisite for joining recommendations against real outcomes later, and is
+# what the GCP batch-only design could not provide.
+data_collector:
+  collections:
+    model_inputs:
+      enabled: "true"
+    model_outputs:
+      enabled: "true"
+
+environment_variables:
+  MLFLOW_TRACKING_URI: ${{WORKSPACE_MLFLOW_URI}}
+  # score.py stamps this onto every scored row and smoke_test.sh asserts it.
+  # A deployment tag is metadata the container cannot read, so the version has
+  # to be injected as an environment variable as well as tagged.
+  FIRMAWARE_MODEL_VERSION: ${{MODEL_VERSION}}
+
+# The resource-group tag policy denies any resource missing one of the six
+# mandatory tags, and an online deployment is an indexed ARM resource, so these
+# are a precondition for the create call succeeding at all.
+tags:
+  app: firmaware
+  env: ${{ENV}}
+  owner: ${{OWNER}}
+  cost_center: ${{COST_CENTER}}
+  data_classification: ${{DATA_CLASSIFICATION}}
+  managed_by: ${{MANAGED_BY}}
+  image_digest: ${{IMAGE_DIGEST}}
+  model_version: ${{MODEL_VERSION}}

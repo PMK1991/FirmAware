@@ -1,0 +1,65 @@
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+name: blue
+endpoint_name: firmaware-score-${{ENV}}
+
+# Byte-for-byte the same shape as deployment-green.yaml apart from the name. That
+# is deliberate: blue and green are not "old" and "new", they are two identical
+# slots that alternate. If they could differ structurally, a rollback would be a
+# deploy -- with its own risk of failing -- rather than a traffic shift, and the
+# sub-30-second rollback target in the architecture would not hold.
+#
+# Whichever slot is not currently serving is the one the next release targets.
+# deploy_endpoint.sh picks it; nothing here assumes green is always the new one.
+model: azureml:FirmAwareRiskModel:${{MODEL_VERSION}}
+
+environment: azureml:firmaware-env@latest
+code_configuration:
+  code: .
+  scoring_script: score.py
+
+instance_type: ${{INSTANCE_TYPE}}
+instance_count: 1
+
+request_settings:
+  request_timeout_ms: 20000
+  max_concurrent_requests_per_instance: 4
+
+liveness_probe:
+  initial_delay: 30
+  period: 10
+  failure_threshold: 3
+
+scale_settings:
+  type: target_utilization
+  min_instances: ${{MIN_INSTANCES}}   # 1 in prod (no cold start), 0 in dev
+  max_instances: 3
+  target_utilization_percentage: 70
+
+egress_public_network_access: disabled
+
+data_collector:
+  collections:
+    model_inputs:
+      enabled: "true"
+    model_outputs:
+      enabled: "true"
+
+environment_variables:
+  MLFLOW_TRACKING_URI: ${{WORKSPACE_MLFLOW_URI}}
+  # score.py stamps this onto every scored row and smoke_test.sh asserts it.
+  # A deployment tag is metadata the container cannot read, so the version has
+  # to be injected as an environment variable as well as tagged.
+  FIRMAWARE_MODEL_VERSION: ${{MODEL_VERSION}}
+
+# The resource-group tag policy denies any resource missing one of the six
+# mandatory tags, and an online deployment is an indexed ARM resource, so these
+# are a precondition for the create call succeeding at all.
+tags:
+  app: firmaware
+  env: ${{ENV}}
+  owner: ${{OWNER}}
+  cost_center: ${{COST_CENTER}}
+  data_classification: ${{DATA_CLASSIFICATION}}
+  managed_by: ${{MANAGED_BY}}
+  image_digest: ${{IMAGE_DIGEST}}
+  model_version: ${{MODEL_VERSION}}

@@ -1,0 +1,9 @@
+variable "name_prefix" { type = string }
+variable "env" { type = string }
+variable "resource_group_name" { type = string }
+variable "resource_group_id" { type = string }
+variable "location" { type = string }
+variable "tags" { type = map(string) }
+variable "alerts_email" { type = string }
+variable "monthly_budget" { type = number }
+variable "log_analytics_workspace_id" { type = string }

@@ -1,0 +1,179 @@
+<mxfile host="app.diagrams.net" modified="2026-07-22T00:00:00.000Z" agent="FirmAware" version="24.0.0" type="device">
+  <diagram id="firmaware-azure-ml" name="FirmAware on Azure ML (ML layer only)">
+    <mxGraphModel dx="1500" dy="850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="t0" value="FirmAware on Azure — ML layer: Azure ML training + Managed Online Endpoints" style="text;html=1;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="12" width="960" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t1" value="RAG evidence layer intentionally out of scope — see FirmAware_RAG_HLD_LLD.md" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="38" width="700" height="18" as="geometry" />
+        </mxCell>
+
+        <mxCell id="g1" value="CI / CD" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#9673a6;dashed=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="70" width="260" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="g2" value="ADLS Gen2 — input + secrets" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#82b366;dashed=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="350" width="260" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="g3" value="Azure Machine Learning workspace" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#6c8ebf;dashed=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="340" y="70" width="620" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="g3a" value="Pipeline job — training (manual trigger, never on merge)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#6c8ebf;dashed=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="365" y="190" width="570" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="g4" value="Inference — Managed Endpoints" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#d79b00;dashed=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="70" width="420" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="g2b" value="ADLS Gen2 — output" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#82b366;dashed=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="500" width="420" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="g5" value="Consumers" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;dashed=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="70" width="160" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="g6" value="Observability + governance" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#d6b656;dashed=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="630" width="1580" height="160" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n1" value="GitHub repo&#xa;code + az ml YAML specs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="110" width="220" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="n2" value="GitHub Actions&#xa;OIDC federated — keyless&#xa;tests → build → deploy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="170" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n3" value="Azure Container Registry&#xa;immutable tags — by digest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="240" width="220" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n4" value="data/&#xa;deployment_events + upcoming&#xa;versioning + soft delete" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="395" width="220" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="n7" value="Key Vault (workspace-linked)&#xa;no app secrets today" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="455" width="220" height="48" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n8" value="Data assets (versioned)&#xa;every run records data version" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="365" y="115" width="270" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n9" value="Compute cluster (CPU)&#xa;min 0 / max 4 — scale to zero" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="665" y="115" width="270" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n10" value="validate&#xa;data contract" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="380" y="240" width="125" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="n11" value="features&#xa;4 derivations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="515" y="240" width="125" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="n12" value="train&#xa;time split + threshold" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="650" y="240" width="125" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="n13" value="evaluate + gate&#xa;blocks registration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="785" y="240" width="135" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="n17" value="Registered environment&#xa;same image as local runs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="365" y="355" width="270" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n14" value="Model Registry&#xa;versions + tags: git sha, digest,&#xa;data version, threshold, metrics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="665" y="355" width="270" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n16" value="MLflow tracking (native)&#xa;params, metrics, artifacts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="365" y="430" width="270" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n18" value="Model Monitoring — drift" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="665" y="430" width="270" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n35" value="Parked: RAG corpus jobs + explain endpoint — attach later, no rework" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#b3b3b3;fontSize=11;dashed=1;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="340" y="528" width="520" height="32" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n19" value="Managed Online Endpoint — firmaware-score&#xa;HTTPS · AAD/key auth · managed identity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="1020" y="115" width="380" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n21" value="Deployment: green&#xa;model v(n) — new&#xa;traffic 0% → 10% → 100%&#xa;autoscale 1–3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="185" width="180" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="n20" value="Deployment: blue&#xa;model v(n-1) — current&#xa;traffic 100%&#xa;kept warm for rollback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1220" y="185" width="180" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="n22" value="score.py — init() loads model + preprocessor once;&#xa;run() validates contract (HTTP 422 on violation),&#xa;returns probability, band, unseen_categories, model_version" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8f8f8;strokeColor=#999999;fontSize=11;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="295" width="380" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n25" value="Batch Endpoint — firmaware-batch&#xa;scheduled bulk scoring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="370" width="380" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n6" value="scores/&#xa;append-only — never modified · WORM optional" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="530" width="380" height="48" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n26" value="Client app / API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1475" y="115" width="130" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n27" value="OT engineer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1475" y="185" width="130" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="n28" value="Analyst / BI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1475" y="255" width="130" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n29" value="Application Insights&#xa;endpoint telemetry, latency" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="70" y="675" width="230" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n30" value="Log Analytics&#xa;job + endpoint logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="320" y="675" width="230" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n31" value="Azure Monitor alerts → Action Group&#xa;job failure · contract violation · 5xx" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="570" y="675" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n32" value="Inference data collection&#xa;inputs + outputs → blob" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="860" y="675" width="250" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n33" value="Azure Policy / Defender&#xa;tagging, no public blob" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1130" y="675" width="230" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n34" value="Cost budget + alert" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1380" y="675" width="220" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n1" target="n2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" value="build + push" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n2" target="n3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="image" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;dashed=1;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n3" target="n17">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="315" y="268" /><mxPoint x="315" y="383" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="e4" value="az ml deploy (green at 0%)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n2" target="n19">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="320" y="198" /><mxPoint x="320" y="95" /><mxPoint x="1210" y="95" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n4" target="n8">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="330" y="419" /><mxPoint x="330" y="140" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;exitX=0.287;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n8" target="n10"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n10" target="n11"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n11" target="n12"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n12" target="n13"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" value="register on pass" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;fontSize=10;exitX=0.11;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n13" target="n14"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" value="runs on" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;dashed=1;fontSize=10;exitX=0.176;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n9" target="n12"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" value="model version" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n14" target="n21">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="975" y="383" /><mxPoint x="975" y="233" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="e13" value="same model" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;fontSize=10;exitX=1;exitY=0.773;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n14" target="n25"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e17" value="append-only" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n25" target="n6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e18" value="score request" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n19" target="n26"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e19" value="single deployment" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;fontSize=10;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n19" target="n27">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1432" y="162" /><mxPoint x="1432" y="213" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="e20" value="reads batches" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;dashed=1;fontSize=10;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n6" target="n28">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1445" y="554" /><mxPoint x="1445" y="283" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="e21" value="collect" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;dashed=1;fontSize=10;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n19" target="n32">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="990" y="143" /><mxPoint x="990" y="660" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="e22" value="drift signal" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jumpStyle=arc;dashed=1;fontSize=10;exitX=0.16;exitY=0;exitDx=0;exitDy=0;entryX=0.87;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="n32" target="n18"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="lgd" value="Rollback: traffic shift blue=100 / green=0 → under 30 s, previous deployment still warm.    Preserved from GCP design: deploy by digest · append-only scores · contract enforced in-app · training is a manual act · no user-managed keys." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8f8f8;strokeColor=#999999;align=left;spacingLeft=10;fontSize=11;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="805" width="1580" height="40" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

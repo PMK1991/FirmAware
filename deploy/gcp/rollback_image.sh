@@ -18,11 +18,11 @@ if [[ -z "${project_id}" || -z "${state_bucket}" ]]; then
   exit 2
 fi
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-terraform -chdir="${root}/infra" init \
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+terraform -chdir="${root}/infra/gcp" init \
   -backend-config="bucket=${state_bucket}" \
   -backend-config="prefix=firmaware/${env_name}"
-terraform -chdir="${root}/infra" apply \
+terraform -chdir="${root}/infra/gcp" apply \
   -auto-approve \
   -var-file="envs/${env_name}.tfvars" \
   -var="project_id=${project_id}" \

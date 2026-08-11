@@ -1,4 +1,4 @@
-name: Deploy dev
+name: Deploy dev (GCP)
 
 on:
   workflow_run:
@@ -66,11 +66,11 @@ jobs:
           tflint_version: v0.55.1
       - name: Confirm infrastructure checks for deployment SHA
         run: |
-          terraform -chdir=infra fmt -check -recursive
-          terraform -chdir=infra init -backend=false
-          terraform -chdir=infra validate
-          tflint --chdir=infra --init
-          tflint --chdir=infra --recursive
+          terraform -chdir=infra/gcp fmt -check -recursive
+          terraform -chdir=infra/gcp init -backend=false
+          terraform -chdir=infra/gcp validate
+          tflint --chdir=infra/gcp --init
+          tflint --chdir=infra/gcp --recursive
 
       - id: auth
         uses: google-github-actions/auth@v3
@@ -97,7 +97,7 @@ jobs:
         name: Build and push immutable image
         env:
           FIRMAWARE_GIT_SHA: ${{ env.DEPLOY_SHA }}
-        run: bash deploy/build.sh dev
+        run: bash deploy/gcp/build.sh dev
 
       - name: Pause existing schedule before changing the job
         run: >-
@@ -108,13 +108,13 @@ jobs:
 
       - name: Terraform init
         run: >-
-          terraform -chdir=infra init -reconfigure
+          terraform -chdir=infra/gcp init -reconfigure
           -backend-config="bucket=${DEV_TF_STATE_BUCKET}"
           -backend-config="prefix=firmaware/dev"
 
       - name: Terraform plan with scheduler paused
         run: >-
-          terraform -chdir=infra plan
+          terraform -chdir=infra/gcp plan
           -var-file=envs/dev.tfvars
           -var="project_id=${GCP_PROJECT_ID}"
           -var="state_bucket_name=${DEV_TF_STATE_BUCKET}"
@@ -125,21 +125,21 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: firmaware-dev-terraform-plan
-          path: infra/dev.tfplan
+          path: infra/gcp/dev.tfplan
           retention-days: 30
 
       - name: Apply candidate with schedule paused
-        run: terraform -chdir=infra apply -auto-approve dev.tfplan
+        run: terraform -chdir=infra/gcp apply -auto-approve dev.tfplan
 
       - id: validate
         name: Validate deployment data
         continue-on-error: true
-        run: bash deploy/run_job.sh validate dev
+        run: bash deploy/gcp/run_job.sh validate dev
 
       - id: smoke
         name: Smoke test
         continue-on-error: true
-        run: bash deploy/smoke_test.sh dev
+        run: bash deploy/gcp/smoke_test.sh dev
 
       - name: Roll back failed candidate
         if: >-
@@ -148,7 +148,7 @@ jobs:
         env:
           DEV_GCP_PROJECT_ID: ${{ vars.DEV_GCP_PROJECT_ID }}
           DEV_TF_STATE_BUCKET: ${{ vars.DEV_TF_STATE_BUCKET }}
-        run: bash deploy/rollback_image.sh dev "${{ steps.previous-image.outputs.image }}"
+        run: bash deploy/gcp/rollback_image.sh dev "${{ steps.previous-image.outputs.image }}"
 
       - name: Fail rejected candidate
         if: steps.validate.outcome != 'success' || steps.smoke.outcome != 'success'
@@ -158,7 +158,7 @@ jobs:
 
       - name: Activate nightly schedule
         run: >-
-          terraform -chdir=infra apply -auto-approve
+          terraform -chdir=infra/gcp apply -auto-approve
           -var-file=envs/dev.tfvars
           -var="project_id=${GCP_PROJECT_ID}"
           -var="state_bucket_name=${DEV_TF_STATE_BUCKET}"

@@ -1,4 +1,4 @@
-name: CI
+name: CI (shared application)
 
 on:
   pull_request:
@@ -35,22 +35,3 @@ jobs:
       # Building only proves the install resolved. Cloud Run runs this image,
       # so also prove the entrypoint imports the training stack it was built for.
       - run: docker run --rm firmaware:ci --help
-
-  terraform:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: infra
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.10.5"
-      - run: terraform fmt -check -recursive
-      - run: terraform init -backend=false
-      - run: terraform validate
-      - uses: terraform-linters/setup-tflint@v4
-        with:
-          tflint_version: v0.55.1
-      - run: tflint --init
-      - run: tflint --recursive

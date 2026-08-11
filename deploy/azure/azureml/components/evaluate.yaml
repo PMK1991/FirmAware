@@ -1,0 +1,48 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+type: command
+
+name: firmaware_evaluate
+display_name: evaluate-and-gate
+version: "1"
+description: >-
+  Compares the untouched test metrics against the incumbent registry version and
+  refuses to let a regressed, under-recalling, or contract-warned model through.
+  Exits non-zero on failure, which stops the pipeline before register: a failed
+  gate leaves the registry with no new version at all.
+
+inputs:
+  model_dir:
+    type: uri_folder
+  features:
+    type: uri_folder
+  auc_tolerance:
+    type: number
+    default: 0.02
+    description: How much AUC may fall below the incumbent before this is a regression.
+  auc_floor:
+    type: number
+    default: 0.65
+    description: Applies only on the very first run, when the registry has no incumbent.
+  min_recall:
+    type: number
+    default: 0.90
+    description: >-
+      A risk model that misses risky deployments is the failure mode that matters;
+      accuracy alone would happily accept it.
+
+outputs:
+  evaluation:
+    type: uri_folder
+    description: gate.json plus the training run's evaluation artifacts.
+
+code: ./steps
+environment: azureml:firmaware-env@latest
+
+command: >-
+  python evaluate_step.py
+  --model-dir ${{inputs.model_dir}}
+  --features ${{inputs.features}}
+  --evaluation ${{outputs.evaluation}}
+  --auc-tolerance ${{inputs.auc_tolerance}}
+  --auc-floor ${{inputs.auc_floor}}
+  --min-recall ${{inputs.min_recall}}

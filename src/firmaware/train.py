@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import importlib.metadata
 import json
 import shutil
@@ -711,12 +712,45 @@ def _serving_input_example(preprocessor: Preprocessor) -> pd.DataFrame:
     return pd.DataFrame([row], columns=SCORING_COLUMNS)
 
 
+def _replace_contents(staging: Path, target: Path) -> None:
+    """Move the staged children into an existing target directory.
+
+    The directory swap in `_promote_artifacts` is the preferred path because it
+    is atomic. It is not always available: when the target is a mount point --
+    an Azure ML pipeline output is a FUSE mount -- renaming it fails with EBUSY
+    no matter what permissions the job has, because the kernel will not rename a
+    mount. Writing through the mount is the only way to publish to it.
+
+    This is not atomic, and it does not need to be. A pipeline output directory
+    is private to the step that writes it and is uploaded only after the step
+    exits, so no reader can observe the intermediate state that atomicity exists
+    to hide.
+    """
+    for existing in target.iterdir():
+        if existing.is_dir() and not existing.is_symlink():
+            shutil.rmtree(existing)
+        else:
+            existing.unlink()
+    for item in staging.iterdir():
+        # shutil.move rather than Path.replace: staging is on the node's local
+        # disk and target is the mount, so this is a cross-device move that
+        # rename(2) cannot do.
+        shutil.move(str(item), str(target / item.name))
+    staging.rmdir()
+
+
 def _promote_artifacts(staging: Path, target: Path, run_id: str) -> None:
     backup = target.parent / f".{target.name}-{run_id}.backup"
     if backup.exists():
         shutil.rmtree(backup)
     if target.exists():
-        target.replace(backup)
+        try:
+            target.replace(backup)
+        except OSError as error:
+            if error.errno not in (errno.EBUSY, errno.EXDEV):
+                raise
+            _replace_contents(staging, target)
+            return
     try:
         staging.replace(target)
     except OSError:

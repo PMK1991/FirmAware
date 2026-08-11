@@ -1,0 +1,9 @@
+variable "name_prefix" { type = string }
+variable "resource_group_name" { type = string }
+variable "location" { type = string }
+variable "unique_suffix" { type = string }
+variable "tags" { type = map(string) }
+variable "registry_sku" { type = string }
+variable "network_isolation" { type = bool }
+variable "purge_protection" { type = bool }
+variable "log_retention_days" { type = number }
