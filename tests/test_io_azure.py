@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from typing import Any
 
 import pandas as pd
 
@@ -53,9 +54,42 @@ class FakeFileClient:
             raise FileNotFoundError(self.path) from error
 
     def upload_data(self, data: bytes, overwrite: bool = False) -> None:
-        if not overwrite and self.path in self.filesystem.files:
+        # Deliberately absent from the write path under test. The real SDK's
+        # upload_data(overwrite=False) appends to a path it never creates, so a
+        # fake that quietly did the right thing here is exactly what hid a live
+        # PathNotFound. Kept only so an accidental reintroduction is loud.
+        raise AssertionError(
+            "write_scores must create, append and flush explicitly: "
+            "upload_data(overwrite=False) does not create the file on ADLS"
+        )
+
+    def create_file(self, match_condition: Any = None) -> None:
+        # Compared by name so this fake still needs no azure package, which is
+        # what keeps these tests honest about the import staying lazy.
+        if getattr(match_condition, "name", None) != "IfMissing":
+            raise AssertionError(
+                "the scores write must be create-if-missing; without it a replay "
+                "would silently replace immutable evidence"
+            )
+        if self.path in self.filesystem.files:
+            # The service answers If-None-Match: * with 409. FileExistsError
+            # stands in for the SDK's ResourceExistsError, which this fake
+            # cannot import.
             raise FileExistsError(self.path)
-        self.filesystem.files[self.path] = data
+        self.filesystem.files[self.path] = b""
+
+    def append_data(self, data: bytes, offset: int, length: int) -> None:
+        if self.path not in self.filesystem.files:
+            # What the real service returns when nothing created the path first.
+            raise FileNotFoundError(self.path)
+        self.filesystem.files[self.path] = (
+            self.filesystem.files[self.path][:offset] + data
+        )
+
+    def flush_data(self, offset: int) -> None:
+        if self.path not in self.filesystem.files:
+            raise FileNotFoundError(self.path)
+        self.filesystem.files[self.path] = self.filesystem.files[self.path][:offset]
 
 
 class FakePath:

@@ -106,6 +106,35 @@ resource "azurerm_role_assignment" "workspace_system_storage_contributor" {
   principal_id         = azurerm_user_assigned_identity.workspace.principal_id
 }
 
+# Table and Queue, and neither is redundant with the Blob grant above: each is a
+# distinct data-plane surface with its own roles, and the Contributor assignment
+# further down is control plane only -- its dataActions list is empty -- so it
+# covers none of the three.
+#
+# Batch endpoints run on ParallelRunStep, whose driver uses all three surfaces on
+# this account: Blob for the snapshot and output, Tables for job telemetry and
+# heartbeats, and a Queue to hand mini-batches to the worker processes. With
+# shared_access_key_enabled = false there is no key to fall back on, so a missing
+# role is fatal rather than slow. The two failures are distinct and sequential --
+# without Tables the driver dies at startup on TableNotFound, and with Tables but
+# no Queue it gets as far as task creation and dies there -- so fixing one simply
+# reveals the other.
+#
+# Neither shows up in training, which uses the blob datastore only. Nothing here
+# is exercised until a batch job is actually invoked, and the job exits 42 with
+# an empty user log, having never called the scoring script.
+resource "azurerm_role_assignment" "workspace_system_storage_table_contributor" {
+  scope                = var.workspace_storage_account_id
+  role_definition_name = "Storage Table Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.workspace.principal_id
+}
+
+resource "azurerm_role_assignment" "workspace_system_storage_queue_contributor" {
+  scope                = var.workspace_storage_account_id
+  role_definition_name = "Storage Queue Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.workspace.principal_id
+}
+
 # --- what Azure ML itself requires of the workspace identity -------------------
 # Microsoft documents an exact table for a workspace with a user-assigned
 # identity, and workspace provisioning fails outright without it -- surfacing as

@@ -101,6 +101,13 @@ def run(raw_data: str) -> Any:
     except (TypeError, ValueError) as error:
         return _reject(correlation_id, f"records are not tabular: {error}")
 
+    # A JSON integer literal becomes an int64 column, and MLflow's schema
+    # enforcement refuses to widen int64 to the double the signature declares.
+    # Without this, {"uptime_days": 120} is rejected while {"uptime_days":
+    # "120"} succeeds -- the smoke fixture sends the quoted form, so the failure
+    # would reach real callers unseen.
+    frame = _as_served(frame)
+
     _LOGGER.info("scoring %d rows, correlation_id=%s", len(frame), correlation_id)
 
     try:
@@ -139,6 +146,43 @@ def run(raw_data: str) -> Any:
         200,
         json_str=True,
     )
+
+
+def _as_served(frame: Any) -> Any:
+    """Cast columns the loaded model declares as double, so int64 input is taken.
+
+    The signature types every numeric as `double` to keep nullable inputs
+    expressible, and MLflow refuses to widen int64 to double, rejecting the
+    request before the model runs. A JSON integer literal parses to int64, so
+    `{"uptime_days": 120}` would be refused while the quoted `"120"` succeeds.
+
+    Read from the loaded model's signature rather than imported from
+    `firmaware.schema`, because training logs the package via `code_paths`: the
+    copy frozen inside the model artifact shadows the image's, so an imported
+    helper would reflect whatever existed when that version was trained and a
+    serving-side fix would silently do nothing until a retrain. Duplicated in
+    batch_score.py for the same reason the two entry points are separate files
+    at all -- neither may import the other, and batch has no HTTP layer.
+
+    A column that will not convert is left alone so the model's own contract
+    validation reports it as a named violation, which `run` turns into a 422.
+    """
+    schema = _MODEL.metadata.get_input_schema()
+    if schema is None:
+        return frame
+
+    converted = {}
+    for spec in schema.inputs:
+        name = getattr(spec, "name", None)
+        if name is None or name not in frame.columns:
+            continue
+        if getattr(spec.type, "name", str(spec.type)) != "double":
+            continue
+        try:
+            converted[name] = frame[name].astype("float64")
+        except (TypeError, ValueError):
+            continue
+    return frame.assign(**converted) if converted else frame
 
 
 def _shape(row: dict[str, Any]) -> dict[str, Any]:

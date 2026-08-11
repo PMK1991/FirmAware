@@ -1,26 +1,29 @@
 from __future__ import annotations
 
+import errno
+import gc
+import importlib.util
 import json
 import tempfile
 import time
 import unittest
 from contextlib import ExitStack
 from pathlib import Path
+from typing import Any
+from unittest import mock
 
 import mlflow
 import numpy as np
 import pandas as pd
 import yaml
-from mlflow.store.model_registry.sqlalchemy_store import (
-    SqlAlchemyStore as RegistrySqlAlchemyStore,
-)
-from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
+from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
+from sqlalchemy.engine import Engine
 
 from firmaware.features import derive_features
 from firmaware.predict import predict
 from firmaware.schema import NUMERIC_COLUMNS, ContractViolation, validate
-from firmaware.train import load_config, split_by_time, train
+from firmaware.train import _promote_artifacts, load_config, split_by_time, train
 from tests.test_schema import make_training_frame
 
 
@@ -79,11 +82,49 @@ def _config() -> dict[str, object]:
     }
 
 
+def _batch_score_module(model: Any) -> Any:
+    """Load the real batch entry script and point it at a loaded model.
+
+    Imported from its path rather than reimplemented, so the assertion covers
+    the file that actually ships. `batch_score.py` reads `_MODEL` at call time
+    and imports nothing from the package at module scope, so binding it here is
+    enough to exercise `_as_served` exactly as the batch driver would.
+    """
+    location = (
+        Path(__file__).resolve().parents[1]
+        / "deploy"
+        / "azure"
+        / "azureml"
+        / "batch_score.py"
+    )
+    spec = importlib.util.spec_from_file_location("firmaware_batch_score", location)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module._MODEL = model
+    return module
+
+
 def _dispose_mlflow_engines() -> None:
-    for store_class in (SqlAlchemyStore, RegistrySqlAlchemyStore):
-        for engine in store_class._engine_map.values():
-            engine.dispose()
-        store_class._engine_map.clear()
+    """Release the SQLite handles MLflow's SQLAlchemy pools hold open.
+
+    Windows refuses to unlink an open file, so without this the temporary
+    directory containing mlflow.db cannot be removed and the test fails during
+    teardown having already passed every assertion.
+
+    Engines are found by sweeping the garbage collector rather than by reaching
+    into MLflow, because every private handle here moved between majors: the
+    tracking store's cache is `_engine_map` in MLflow 3 and
+    `_db_uri_sql_alchemy_engine_map` in 2.x, the registry store keeps no
+    class-level cache at all in 2.x, and `_dispose_engine` is an instance
+    method needing a store object this code never sees. Naming any of them
+    means the helper silently stops disposing anything the moment the pin
+    moves, which is exactly how it broke. Disposing is safe even for an engine
+    still cached: SQLAlchemy replaces the pool and reconnects on next use.
+    """
+    for candidate in gc.get_objects():
+        if isinstance(candidate, Engine):
+            candidate.dispose()
 
 
 class EndToEndTests(unittest.TestCase):
@@ -206,6 +247,30 @@ class EndToEndTests(unittest.TestCase):
             nullable_hosted = hosted_model.predict(nullable_scoring)
             self.assertEqual(len(nullable_hosted), 1)
 
+            # The batch entry point reads CSV, so its numerics arrive as int64
+            # and MLflow refuses to widen int64 to the signature's double. Every
+            # other assertion here pre-casts through _as_served and so cannot see
+            # this; it took a real batch job to surface it. Assert both halves:
+            # that the raw frame is genuinely rejected, and that the entry
+            # script's own coercion is what makes it acceptable.
+            as_read_from_csv = scoring.iloc[:5].copy()
+            for column in ("uptime_days", "past_failure_count", "cve_count"):
+                as_read_from_csv[column] = (
+                    as_read_from_csv[column].astype("float64").round().astype("int64")
+                )
+            with self.assertRaises(MlflowException) as refused:
+                hosted_model.predict(as_read_from_csv)
+            self.assertIn("int64", str(refused.exception))
+
+            coerced = hosted_model.predict(
+                _batch_score_module(hosted_model)._as_served(as_read_from_csv)
+            )
+            self.assertEqual(len(coerced), 5)
+            self.assertEqual(
+                list(coerced["risk_prediction"]),
+                list(hosted_scores["risk_prediction"]),
+            )
+
             metadata = json.loads(
                 (artifacts_one / "metadata.json").read_text(encoding="utf-8")
             )
@@ -232,6 +297,98 @@ class EndToEndTests(unittest.TestCase):
             path.write_text(yaml.safe_dump(config), encoding="utf-8")
             with self.assertRaisesRegex(ContractViolation, "seed"):
                 load_config(path)
+
+
+class PromoteArtifactsTests(unittest.TestCase):
+    """The artifact promotion has to work on a mount as well as a plain dir."""
+
+    def test_promotion_swaps_directories_when_rename_is_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "model_dir"
+            target.mkdir()
+            (target / "stale.json").write_text("old", encoding="utf-8")
+            staging = root / ".model_dir-run1.staging"
+            staging.mkdir()
+            (staging / "model.json").write_text("new", encoding="utf-8")
+
+            _promote_artifacts(staging, target, "run1")
+
+            self.assertEqual(
+                (target / "model.json").read_text(encoding="utf-8"), "new"
+            )
+            self.assertFalse((target / "stale.json").exists())
+            self.assertFalse(staging.exists())
+
+    def test_promotion_writes_through_a_target_that_cannot_be_renamed(
+        self,
+    ) -> None:
+        """An Azure ML pipeline output is a FUSE mount.
+
+        Renaming a mount point fails with EBUSY whatever the permissions, so the
+        atomic swap is simply unavailable there and the contents have to be
+        written through the mount instead. Before this was handled, training
+        completed and then died publishing its own output.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "model_dir"
+            target.mkdir()
+            (target / "stale.json").write_text("old", encoding="utf-8")
+            staging = root / ".model_dir-run1.staging"
+            staging.mkdir()
+            (staging / "model.json").write_text("new", encoding="utf-8")
+            (staging / "nested").mkdir()
+            (staging / "nested" / "metrics.json").write_text(
+                "{}", encoding="utf-8"
+            )
+
+            original_replace = Path.replace
+
+            def refuse_to_rename_the_mount(
+                self: Path, destination: Any
+            ) -> Any:
+                if self == target:
+                    raise OSError(errno.EBUSY, "Device or resource busy")
+                return original_replace(self, destination)
+
+            with mock.patch.object(
+                Path, "replace", refuse_to_rename_the_mount
+            ):
+                _promote_artifacts(staging, target, "run1")
+
+            # The same directory object survives; only its contents changed.
+            self.assertTrue(target.is_dir())
+            self.assertEqual(
+                (target / "model.json").read_text(encoding="utf-8"), "new"
+            )
+            self.assertEqual(
+                (target / "nested" / "metrics.json").read_text(
+                    encoding="utf-8"
+                ),
+                "{}",
+            )
+            self.assertFalse((target / "stale.json").exists())
+            self.assertFalse(staging.exists())
+
+    def test_promotion_still_raises_on_an_unexpected_os_error(self) -> None:
+        """Only EBUSY and EXDEV mean "write through"; nothing else is masked."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "model_dir"
+            target.mkdir()
+            staging = root / ".model_dir-run1.staging"
+            staging.mkdir()
+            (staging / "model.json").write_text("new", encoding="utf-8")
+
+            def refuse_with_permission_denied(self: Path, destination: Any) -> Any:
+                raise OSError(errno.EACCES, "Permission denied")
+
+            with (
+                mock.patch.object(Path, "replace", refuse_with_permission_denied),
+                self.assertRaises(OSError),
+            ):
+                _promote_artifacts(staging, target, "run1")
 
 
 if __name__ == "__main__":

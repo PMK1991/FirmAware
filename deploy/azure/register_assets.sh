@@ -142,12 +142,17 @@ with open(sys.argv[1], "rb") as handle:
 
   # Auto-versioned rather than named after the hash: a revert has to produce a
   # NEW version, and a hash-named version cannot be created twice.
+  #
+  # The hash goes on via `--set`, not `--tags`: `az ml data create` has no
+  # `--tags` argument, unlike most other `az ml * create` commands. Without the
+  # tag the idempotency check above can never match, so every run would cut a
+  # new version of an unchanged config.
   az_ml data create \
     --name "${name}" \
     --type uri_file \
     --path "${source_path}" \
     --description "${description}" \
-    --tags content_sha256="${content_hash}" \
+    --set tags.content_sha256="${content_hash}" \
     --output none
   local version
   version="$(az_ml data show --name "${name}" --label latest --query version -o tsv)"

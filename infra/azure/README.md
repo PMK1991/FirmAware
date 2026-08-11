@@ -27,6 +27,7 @@ the contract it is built against is [`../../docs/design/azure-implementation-spe
 | Endpoint ownership | Terraform creates the endpoints (`azapi`), the release scripts create the *deployments*. Infrastructure lifetime and release lifetime are different; an endpoint outlives every deployment that has ever sat behind it. `endpoint-online.yaml` and `endpoint-batch.yaml` are the reviewable declarations of what Terraform builds. |
 | Score immutability | Scores are append-only by two independent mechanisms: an RBAC role with no `blobs/delete` action, and a container immutability policy. Either alone is a single point of failure — RBAC can be re-granted, a policy can be created unlocked — so both are present. |
 | MLflow | The workspace's native tracking is the system of record. No MLflow server is deployed, and the local SQLite store stays a development convenience, exactly as on GCP. |
+| MLflow version | Pinned to **2.x** (`mlflow==2.22.5`), and this is an Azure constraint rather than caution. The workspace tracking server implements the MLflow 2 REST surface and has no `/api/2.0/mlflow/logged-models`, while MLflow 3's `Model.log()` calls `_create_logged_model` unconditionally — there is no flag or env var to disable it. A 3.x pin resolves, installs, trains to completion and *then* dies on a 404 at registration, having burnt the whole job. `azureml-mlflow` only caps (`mlflow-skinny<=3.13.0`) and sets no floor, so taking the newest version it allows is exactly the trap. |
 | AML environment | Registered by `register_assets.sh` from the image digest, with **no `conda_file`**. The runtime image is `python:3.11-slim`, which has no conda, so a conda layer cannot build on it. The Azure-side packages (`azureml-mlflow`, ADLS client, inference server) go into the image through the `azure` extra and the `PIP_EXTRAS` build arg — so what deploys is exactly what CI built and Trivy scanned, rather than something AML assembles afterwards. |
 | CI identity | One identity, created by `bootstrap.sh` together with its GitHub federation, then read by Terraform as a data source and granted its roles. A second Terraform-created identity would take the grants while CI kept authenticating as the first. The federation stays out of Terraform because an identity able to write its own federated credentials can authorise any branch or environment it likes. |
 | Scoring responses | `score.py` returns `AMLResponse`, not a JSON string. A returned string makes Azure ML answer HTTP 200 whatever the body says, which would have made every contract violation look like a success to a caller. |
@@ -35,7 +36,16 @@ the contract it is built against is [`../../docs/design/azure-implementation-spe
 | Secrets | None. CI federates through OIDC, runtime uses user-assigned managed identities, storage has `shared_access_key_enabled = false` and the registry has `admin_enabled = false`. There is no credential in this repository to rotate, expire, or leak. |
 | Resource group | One group per environment holds everything, named by `resource_group_name` (dev overrides it to `firmAware`). Terraform state stays in its own `rg-firmaware-tfstate`, because a group that can be destroyed by the root that lives in it is not a safe place for the file describing how to rebuild it. |
 | Workspace identity grants | Contributor at each **individual** dependency — Key Vault, workspace storage, ACR, Application Insights — plus the data-plane halves (Key Vault Administrator, Storage Blob Data Contributor). Microsoft's documented table, not a guess. The group-scope grant stays read-only `Reader`; it does not substitute, because provisioning performs control-plane *writes* on all four. |
+| Workspace storage data plane | The workspace identity holds **Blob, Table *and* Queue** Data Contributor on the workspace storage account, not Blob alone. Batch endpoints run on ParallelRunStep, which keeps telemetry and heartbeats in Tables and distributes mini-batches through a Queue; `Contributor` grants none of that, being control plane only. With `shared_access_key_enabled = false` there is no key fallback, so each missing role is fatal, and they fail *sequentially* — granting Tables just moves the error from startup to task creation. Training never touches either surface, so this is invisible until a batch job is actually invoked, where it surfaces as exit code 42 with an empty user log. |
+| Workspace storage auth mode | `storage_account_access_type = "Identity"`. Azure ML otherwise defaults `systemDatastoresAuthMode` to `accesskey`, which directly contradicts `shared_access_key_enabled = false` on that account: the workspace provisions, then every data-asset registration and job output fails with `KeyBasedAuthenticationNotPermitted`. |
 | Batch endpoint identity | `SystemAssigned`, unlike the online endpoint. Batch endpoints reject a user-assigned identity outright. Nothing is lost: a batch endpoint is only a routing name, and the work runs on the training cluster under the workspace identity, so append-only on `scores` is still enforced where the writes happen. |
+| Batch config carriage | The model version reaches `batch_score.py` through a `model_version.txt` sidecar in the **code snapshot**, not through `environment_variables`. Batch deployments silently discard that block: the schema advertises it, the CLI accepts it, and the created deployment reads back `environment_variables: {}` — the job definition in `logs/azureml/executionlogs.txt` carries only AML's own `AML_PARAMETER_*` keys. Online deployments *and* command jobs both honour it, which is precisely what makes this look safe. Without the sidecar every published row reads `model_version=unknown`. `deploy_batch.sh` writes the file and removes it again on a trap. |
+| Batch deployments are always recreated | `deploy_batch.sh` runs `create` unconditionally, which is an upsert, rather than skipping when the deployment name already exists. The deployment is named for the *model* version, but the image, the scoring script and the environment version all move independently of it — so "it already exists" meant serving stale code, most damagingly on the rollback path, whose entire purpose is to restore old code. |
+| Scores are staged, then published | Batch endpoints physically cannot write to `scores`. `--output-path` at that datastore fails `DatastoreTypeNotSupported` — batch rejects `azure_data_lake_gen2`, and the lake must be HNS to be addressable over `abfss://`. Registering the same container again as an `azure_blob` datastore gets past that and scoring succeeds, but the driver's final concat still fails HTTP 409 *"blob is immutable due to a policy"*: `protected_append_writes_all_enabled` permits append-style writes only, and AML uploads whole blobs. So batch stages raw output on the workspace store — scratch space — and `job-publish-scores.yaml` promotes it through the same `write_scores` the `predict` CLI uses. `run_batch_scoring.sh` drives both halves. |
+| Publishing runs on the cluster | Not on the CI runner. The append-only role on `scores` belongs to the workspace identity; the CI identity holds `AzureML Data Scientist` and no storage data-plane grant at all, so a runner-side publish could not write there even if the policy allowed it. |
+| `AZURE_CLIENT_ID` on cluster jobs | Any job that authenticates to storage from the cluster must set it. The cluster runs a **user-assigned** identity, but `DefaultAzureCredential`'s managed-identity probe asks IMDS for the *system-assigned* one unless `AZURE_CLIENT_ID` names another. The failure is `ClientAuthenticationError`, which reads exactly like a missing role assignment and is not one. `run_batch_scoring.sh` resolves it from the compute at submit time rather than hardcoding it, because the value differs per environment. |
+| ADLS writes use create/append/flush | `write_scores` calls `create_file(match_condition=IfMissing)` → `append_data` → `flush_data`, never `upload_data(overwrite=False)`. The latter does not mean what its name suggests on ADLS: it appends to a path it never creates, so a brand-new score object fails `PathNotFound`. It is also the only shape the `scores` container accepts, since protected append writes refuse whole-blob uploads. `IfMissing` sends `If-None-Match: *`, making the create the ADLS counterpart of GCS's `if_generation_match=0`. |
+| A dirty tree cannot be tagged with a commit SHA | `build.sh` refuses to build when the image inputs differ from `HEAD`. Its tag is a commit SHA but its build context is the working tree, and the SHA short-circuit that makes the script idempotent then returns whatever was pushed under that SHA earlier — so a rebuild after an uncommitted change silently yields a *stale* image. This cost real time: a rebuild returned a day-old image predating three fixes, and the symptom appeared two deploys later as a model that would not load, which looks nothing like a build problem. CI passes `GITHUB_SHA` explicitly and controls its own checkout, so the guard never fires there. Locally, either commit or set `FIRMAWARE_ALLOW_DIRTY=1`, which tags `dirty-<content-hash>` — honest about not being a commit, and still content-addressed so the digest changes if and only if the image would. |
 
 ## Resource topology
 
@@ -413,6 +423,19 @@ failing in the first place, which is cheaper than waiting out the cache.
 ## Operating
 
 ```bash
+# Seed the lake. The data assets are pointers, so registration succeeds against
+# an empty container and training is what fails, several minutes later, inside a
+# job. Terraform creates the containers; it deliberately does not upload data.
+#
+# Subscription Owner does not grant this: the data plane is a separate surface,
+# so the upload returns AuthorizationPermissionMismatch until the human running
+# it also holds Storage Blob Data Contributor on the account. Grants take a
+# minute or two to propagate.
+az storage blob upload \
+  --account-name "$(terraform -chdir=infra/azure output -raw storage_account_name)" \
+  --container-name data --name deployment_events.csv \
+  --file data/deployment_events.csv --auth-mode login
+
 # Build and push, emitting a digest.
 AZURE_ACR_NAME=$(terraform -chdir=infra/azure output -raw container_registry_name) \
   bash deploy/azure/build.sh dev
@@ -430,6 +453,17 @@ bash deploy/azure/run_training.sh dev
 bash deploy/azure/deploy_endpoint.sh dev "$MODEL_VERSION" "$IMAGE_DIGEST"
 bash deploy/azure/smoke_test.sh dev green
 bash deploy/azure/promote_traffic.sh dev green blue
+
+# Bulk scoring. Two jobs, not one: the batch endpoint stages its output on the
+# workspace store because it cannot write to the immutable scores container,
+# and a short cluster job then publishes it there. Invoking the endpoint
+# directly scores correctly but produces no evidence -- the run still succeeds.
+bash deploy/azure/deploy_batch.sh dev "$FIRMAWARE_MODEL_VERSION"
+bash deploy/azure/run_batch_scoring.sh dev deploy/azure/fixtures/upcoming_smoke.csv
+
+# Or drive the same path and assert on the published object, including that
+# overwriting it is refused.
+bash deploy/azure/batch_smoke_test.sh dev
 
 # Verify every control. Env-aware: announces dev relaxations, fails on breaks.
 bash deploy/azure/security_check.sh dev

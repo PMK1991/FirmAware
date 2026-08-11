@@ -18,6 +18,15 @@ resource "azurerm_machine_learning_workspace" "this" {
 
   primary_user_assigned_identity = var.workspace_identity_id
 
+  # The workspace's own storage account has shared-key auth disabled, so the
+  # workspace must reach its system datastores over Entra ID. Azure ML defaults
+  # this to "AccessKey", which means it mints an account-key SAS the storage
+  # account then refuses -- registering a local data asset or writing job output
+  # fails with KeyBasedAuthenticationNotPermitted. The two settings have to be
+  # chosen together; leaving this at the default silently contradicts
+  # `shared_access_key_enabled = false` on the storage module.
+  storage_account_access_type = "Identity"
+
   # Suppresses Azure's own diagnostic capture of data that may contain the
   # payload. On in prod, off in dev where the ability to read a failure trace is
   # worth more than the suppression on synthetic data.

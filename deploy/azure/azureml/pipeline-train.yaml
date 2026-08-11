@@ -68,9 +68,12 @@ jobs:
     outputs:
       model_dir: ${{parent.outputs.model_dir}}
     environment_variables:
-      # The application makes the same MLflow calls it makes locally; only the
-      # URI differs. That is the whole portability claim, and it is one variable.
-      MLFLOW_TRACKING_URI: ${{workspace.mlflow_tracking_uri}}
+      # No MLFLOW_TRACKING_URI here. Azure ML injects it into every job whose
+      # environment has azureml-mlflow installed, and `${{workspace.*}}` is not
+      # a binding the pipeline schema accepts -- only parent.inputs,
+      # parent.jobs.*.outputs and parent.outputs resolve. The application makes
+      # the same MLflow calls it makes locally; only the injected URI differs,
+      # which is the whole portability claim.
       MLFLOW_EXPERIMENT_NAME: firmaware
       FIRMAWARE_REGISTERED_MODEL_NAME: FirmAwareRiskModel
 
@@ -83,9 +86,9 @@ jobs:
     outputs:
       evaluation: ${{parent.outputs.evaluation}}
     environment_variables:
-      # Needed to read the incumbent version's metrics off the registry: the
-      # baseline is whatever is already registered, not a number in a file.
-      MLFLOW_TRACKING_URI: ${{workspace.mlflow_tracking_uri}}
+      # Reads the incumbent version's metrics off the registry: the baseline is
+      # whatever is already registered, not a number in a file. The tracking URI
+      # is injected by Azure ML, as in the train step.
       FIRMAWARE_REGISTERED_MODEL_NAME: FirmAwareRiskModel
 
   register:
@@ -97,7 +100,6 @@ jobs:
     outputs:
       registration: ${{parent.outputs.registration}}
     environment_variables:
-      MLFLOW_TRACKING_URI: ${{workspace.mlflow_tracking_uri}}
       FIRMAWARE_REGISTERED_MODEL_NAME: FirmAwareRiskModel
       GIT_SHA: ${{parent.inputs.git_sha}}
       IMAGE_DIGEST: ${{parent.inputs.image_digest}}

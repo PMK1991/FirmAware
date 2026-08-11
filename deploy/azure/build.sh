@@ -10,6 +10,19 @@
 # returned rather than rebuilt. A rerun of the same commit therefore cannot
 # produce a different image, which is what makes "promote what was tested" a
 # check rather than a hope.
+#
+# That guarantee holds only while the tag actually identifies the content, and
+# the tag is a commit SHA while the build context is the *working tree*. On a
+# dirty tree the two disagree, and the short-circuit above then returns whatever
+# was pushed under that SHA earlier -- silently, and with no relationship to the
+# code on disk. This is not hypothetical: it served a day-old image predating
+# three fixes, and the resulting failure surfaced two deploys later as a model
+# that would not load, which looks nothing like a build problem.
+#
+# So a dirty tree is refused rather than mislabelled. CI always builds a clean
+# checkout, so nothing changes there. Locally, either commit -- which is what
+# makes the SHA true -- or set FIRMAWARE_ALLOW_DIRTY=1 to build under a tag
+# derived from the content itself, which is honest about not being a commit.
 set -euo pipefail
 
 env_name="${1:-dev}"
@@ -20,6 +33,42 @@ git_sha="${FIRMAWARE_GIT_SHA:-${GITHUB_SHA:-$(git rev-parse HEAD)}}"
 if [[ ! "${env_name}" =~ ^(dev|prod)$ ]]; then
   echo "Environment must be dev or prod" >&2
   exit 2
+fi
+
+# Hashes exactly what the Dockerfile copies, so the tag changes if and only if
+# the image would. Ordered by `sort` because directory iteration order is not
+# guaranteed and an unstable hash would defeat the point.
+content_tag() {
+  local listing
+  listing="$(
+    {
+      printf '%s\n' "${PIP_EXTRAS:-train,azure}"
+      find Dockerfile pyproject.toml README.md config.yaml src -type f -print0 \
+        | sort -z | xargs -0 sha256sum
+    } | sha256sum | cut -c1-16
+  )"
+  printf 'dirty-%s' "${listing}"
+}
+
+if [[ -n "${FIRMAWARE_GIT_SHA:-${GITHUB_SHA:-}}" ]]; then
+  # An explicit SHA means the caller controls the checkout (CI does), so the
+  # working tree is not this script's to judge.
+  dirty=""
+else
+  dirty="$(git status --porcelain --untracked-files=no -- Dockerfile pyproject.toml README.md config.yaml src)"
+fi
+
+if [[ -n "${dirty}" ]]; then
+  if [[ "${FIRMAWARE_ALLOW_DIRTY:-0}" != "1" ]]; then
+    echo "Refusing to build: the image inputs differ from ${git_sha}." >&2
+    echo "Tagging this build with that SHA would make the tag a lie, and the" >&2
+    echo "SHA short-circuit would then hand the stale image to every later run." >&2
+    echo "${dirty}" >&2
+    echo "Commit the changes, or set FIRMAWARE_ALLOW_DIRTY=1 for a content-tagged build." >&2
+    exit 3
+  fi
+  git_sha="$(content_tag)"
+  echo "[build] dirty tree: building as ${git_sha} rather than a commit SHA" >&2
 fi
 
 login_server="$(az acr show --name "${registry}" --query loginServer -o tsv)"

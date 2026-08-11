@@ -1,0 +1,56 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+
+display_name: publish-scores
+description: >-
+  Promote a batch scoring run from the workspace staging area into the
+  append-only scores container.
+
+  A separate job rather than part of the batch deployment because a batch
+  endpoint physically cannot write there: `--output-path` rejects an ADLS Gen2
+  datastore, and re-registering the container over the blob API only gets as far
+  as HTTP 409 "blob is immutable due to a policy", because AML uploads whole
+  blobs and the container permits append-style writes only.
+
+  It runs on the cluster rather than on the CI runner because the append-only
+  role on that container belongs to the workspace identity. The CI identity has
+  no storage data-plane grant at all.
+
+# Job inputs are values, not declarations: unlike a component, a job schema
+# accepts no `description` here and rejects the file outright if one is present.
+inputs:
+  staged:
+    type: uri_folder
+    path: ${{STAGED_PATH}}
+  scores_uri: ${{SCORES_URI}}
+  source_job: ${{SOURCE_JOB}}
+
+code: ./components/steps
+environment: azureml:firmaware-env@latest
+compute: azureml:firmaware-cluster
+
+# Unlike a batch deployment, a command job does honour this, and it is required
+# rather than decorative. The cluster runs a *user-assigned* identity, and
+# DefaultAzureCredential's managed-identity probe asks IMDS for the
+# system-assigned one unless AZURE_CLIENT_ID names another -- so without this the
+# write fails with ClientAuthenticationError, which reads like a missing role
+# assignment and is not one. Rendered from the compute's own identity at submit
+# time rather than hardcoded, because the value differs per environment.
+environment_variables:
+  AZURE_CLIENT_ID: ${{CLIENT_ID}}
+
+command: >-
+  python publish_scores_step.py
+  --staged ${{inputs.staged}}
+  --scores-uri ${{inputs.scores_uri}}
+  --run-id ${{inputs.source_job}}
+
+# The resource-group tag policy denies any resource missing one of the six
+# mandatory tags, and a job is an indexed ARM resource.
+tags:
+  app: firmaware
+  env: ${{ENV}}
+  owner: ${{OWNER}}
+  cost_center: ${{COST_CENTER}}
+  data_classification: ${{DATA_CLASSIFICATION}}
+  managed_by: ${{MANAGED_BY}}

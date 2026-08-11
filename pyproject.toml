@@ -32,12 +32,19 @@ train = [
   "numpy==1.26.4",
   "scikit-learn==1.6.1",
   "xgboost==3.0.5",
-  # Capped at 3.13.0 by azureml-mlflow, whose newest release requires
-  # mlflow-skinny<=3.13.0. Pinned to the same version in every environment
-  # rather than letting the azure extra pull a different one: the tracking
-  # client writes run metadata, and two versions across local, GCP and AML is
-  # exactly the kind of drift the exact pins here exist to prevent.
-  "mlflow==3.13.0",
+  # MLflow 2, not 3, and this is a hard Azure constraint rather than caution.
+  # Azure ML's hosted tracking server implements the MLflow 2 REST surface: it
+  # has no /api/2.0/mlflow/logged-models. MLflow 3's Model.log() calls
+  # _create_logged_model unconditionally -- there is no flag, env var or
+  # fallback -- so every log_model against an AML workspace dies on a 404 after
+  # training has already finished. azureml-mlflow only caps (mlflow-skinny
+  # <=3.13.0) and sets no floor, so 2.x satisfies it.
+  #
+  # Still one version in every environment, which is the point: local, GCP and
+  # AML must agree, and AML is the one that cannot move. The code already uses
+  # the log_model(artifact_path=...) idiom that MLflow 3 deprecates, so nothing
+  # here depends on a 3.x API.
+  "mlflow==2.22.5",
 ]
 app = [
   "streamlit==1.51.0",
@@ -57,10 +64,10 @@ azure = [
   "azure-identity>=1.17,<2",
   "azure-storage-file-datalake>=12.16,<13",
   # Redirects the application's existing MLflow calls at the workspace tracking
-  # store without any application code change. Pinned exactly: the release range
-  # is what caps mlflow above, and an open range lets the resolver backtrack to
-  # a 1.5x release that also caps azure-storage-blob below what the datalake
-  # client needs, producing an unsolvable set rather than an older install.
+  # store without any application code change. Pinned exactly: an open range
+  # lets the resolver backtrack to a 1.5x release that also caps
+  # azure-storage-blob below what the datalake client needs, producing an
+  # unsolvable set rather than an older install.
   "azureml-mlflow==1.62.0.post5",
   # Managed online endpoints run the scoring script under this server. Without
   # it in the image, a custom-image deployment with a scoring_script fails to

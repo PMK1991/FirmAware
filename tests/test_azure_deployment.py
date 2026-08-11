@@ -395,13 +395,30 @@ class AzureFirstDeployTests(unittest.TestCase):
         # `az ml` resolves a spec's relative `code:` against the spec's own
         # location, so rendering into /tmp would upload /tmp rather than the
         # scoring script.
-        for name in ("deploy_endpoint.sh", "rollback_model.sh"):
+        for name in ("deploy_endpoint.sh", "deploy_batch.sh"):
             script = (AZURE_DEPLOY / name).read_text(encoding="utf-8")
             self.assertIn(
                 "mktemp -p deploy/azure/azureml",
                 script,
                 f"{name} renders the deployment spec away from its code directory",
             )
+
+    def test_batch_release_and_rollback_share_one_implementation(self) -> None:
+        """Rollback must not be the only path that can create a batch deployment.
+
+        A batch endpoint has no traffic map, so releasing and rolling back are
+        the same operation aimed at different versions. When only
+        `rollback_model.sh` implemented it, an environment's first batch
+        deployment could be created solely by "rolling back" to a version that
+        had never been deployed, and the code an incident depends on was the
+        code that had never run.
+        """
+        rollback = (AZURE_DEPLOY / "rollback_model.sh").read_text(encoding="utf-8")
+        self.assertIn("deploy/azure/deploy_batch.sh", rollback)
+        self.assertNotIn("batch-deployment create", rollback)
+
+        workflow = _read(".github", "workflows", "azure-deploy-dev.yaml")
+        self.assertIn("deploy/azure/deploy_batch.sh", workflow)
 
     def test_traffic_maps_never_name_a_deployment_that_may_not_exist(self) -> None:
         # On the first release only one slot exists, and the endpoint rejects a
@@ -427,6 +444,81 @@ class AzureFirstDeployTests(unittest.TestCase):
         # set, so it cannot share the online endpoint's score.py.
         self.assertEqual(spec["code_configuration"]["scoring_script"], "batch_score.py")
         self.assertTrue((AZURE_DEPLOY / "azureml" / "batch_score.py").is_file())
+
+    def test_batch_deployment_declares_no_environment_variables(self) -> None:
+        # The schema advertises the key and the CLI accepts it, but the service
+        # discards it: a created batch deployment reads back
+        # `environment_variables: {}` and the job definition in executionlogs.txt
+        # carries only AML's own AML_PARAMETER_* keys. Online deployments and
+        # command jobs both honour it, which is exactly why this looks safe.
+        # Declaring it here would silently reintroduce model_version="unknown".
+        spec = yaml.safe_load((AZURE_DEPLOY / "azureml" / "deployment-batch.yaml").read_text())
+        self.assertNotIn("environment_variables", spec)
+
+    def test_the_model_version_reaches_batch_through_the_code_snapshot(self) -> None:
+        # Since environment variables cannot carry it, deploy_batch.sh writes a
+        # sidecar next to the scoring script and removes it again afterwards.
+        deploy = (AZURE_DEPLOY / "deploy_batch.sh").read_text(encoding="utf-8")
+        self.assertIn("model_version.txt", deploy)
+        self.assertIn("trap ", deploy)
+        self.assertIn("model_version.txt", (AZURE_DEPLOY / "azureml" / "batch_score.py").read_text())
+
+    def test_batch_deployment_is_always_recreated_never_reused(self) -> None:
+        # `az ml batch-deployment create` is an upsert, and the deployment name
+        # tracks the model version only. The image, the scoring script and the
+        # environment all move independently of it, so skipping the create when
+        # the name already exists silently serves stale code -- most damagingly
+        # on the rollback path, where the whole point is to restore old code.
+        deploy = (AZURE_DEPLOY / "deploy_batch.sh").read_text(encoding="utf-8")
+        self.assertIn("az_ml batch-deployment create", deploy)
+        self.assertNotIn("already exists; reusing", deploy)
+
+    def test_the_publish_job_names_the_user_assigned_client_id(self) -> None:
+        # The cluster runs a user-assigned identity, but DefaultAzureCredential
+        # asks IMDS for the system-assigned one unless AZURE_CLIENT_ID names
+        # another. Without this the write fails with ClientAuthenticationError,
+        # which reads like a missing role assignment and is not one.
+        spec = yaml.safe_load((AZURE_DEPLOY / "azureml" / "job-publish-scores.yaml").read_text())
+        self.assertIn("AZURE_CLIENT_ID", spec.get("environment_variables", {}))
+        run = (AZURE_DEPLOY / "run_batch_scoring.sh").read_text(encoding="utf-8")
+        self.assertIn("client_id", run)
+
+    def test_the_publish_step_reads_exactly_what_batch_writes(self) -> None:
+        # The staged file is headerless -- the batch driver hardcodes
+        # `--append_row_dataframe_header False` -- so nothing at runtime can
+        # detect a column-order drift between the two scripts. It would surface
+        # as values silently landing in the wrong columns of an immutable object.
+        batch = (AZURE_DEPLOY / "azureml" / "batch_score.py").read_text(encoding="utf-8")
+        step = (
+            AZURE_DEPLOY / "azureml" / "components" / "steps" / "publish_scores_step.py"
+        ).read_text(encoding="utf-8")
+
+        written = re.search(r"_OUTPUT_COLUMNS = \[(.*?)\]", batch, re.DOTALL)
+        self.assertIsNotNone(written, "batch_score.py no longer declares _OUTPUT_COLUMNS")
+        extra = re.findall(r'"([a-z_]+)"', written.group(1))
+
+        read = re.search(r"STAGED_COLUMNS = \[(.*?)\]", step, re.DOTALL)
+        self.assertIsNotNone(read, "publish_scores_step.py no longer declares STAGED_COLUMNS")
+
+        from firmaware.model import SCORE_COLUMNS
+
+        self.assertIn("*SCORE_COLUMNS", read.group(1))
+        self.assertEqual(
+            extra,
+            [*SCORE_COLUMNS, "model_version", "threshold"],
+            "batch_score._OUTPUT_COLUMNS and publish_scores_step.STAGED_COLUMNS "
+            "have drifted; the staged file has no header to catch it",
+        )
+
+    def test_the_publish_step_refuses_unattributable_rows(self) -> None:
+        # An immutable container cannot be corrected inside its retention
+        # window, so a row that cannot name the model that produced it must not
+        # enter it at all.
+        step = (
+            AZURE_DEPLOY / "azureml" / "components" / "steps" / "publish_scores_step.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('version == "unknown"', step)
+        self.assertIn("Refusing to write unattributable", step)
 
     def test_every_deployment_carries_the_policy_mandated_tags(self) -> None:
         # A Deny policy at resource-group scope rejects untagged resources, and
@@ -496,19 +588,47 @@ class AzureAssetRegistrationTests(unittest.TestCase):
         self.assertIn('ENTRYPOINT ["python", "-m", "firmaware"]', dockerfile)
         self.assertIn("--target azureml", (AZURE_DEPLOY / "build.sh").read_text())
 
+    def test_a_dirty_tree_cannot_be_published_under_a_commit_sha(self) -> None:
+        """The tag is a commit SHA; the build context is the working tree.
+
+        When they disagree the SHA short-circuit at the top of build.sh returns
+        whatever was pushed under that SHA before, so a rebuild after an
+        uncommitted change silently yields a stale image. Observed: a day-old
+        image predating three fixes, whose symptom appeared two deploys later
+        as a model that would not load.
+        """
+        build = (AZURE_DEPLOY / "build.sh").read_text(encoding="utf-8")
+        self.assertIn("git status --porcelain", build)
+        self.assertIn("FIRMAWARE_ALLOW_DIRTY", build)
+        # The escape hatch must not reuse the commit SHA either, or it just
+        # relabels the same lie.
+        self.assertIn("dirty-", build)
+        # CI passes the SHA explicitly and controls its own checkout, so the
+        # guard must not fire there.
+        self.assertIn("FIRMAWARE_GIT_SHA", build)
+
     def test_azure_dependency_set_is_exactly_pinned(self) -> None:
         """The azure extra must resolve, and only exact pins make that stable.
 
         An open `azureml-mlflow` range lets pip backtrack into 1.5x releases
         that cap azure-storage-blob below what the datalake client requires,
-        turning a solvable set into ResolutionImpossible. mlflow is capped by
-        azureml-mlflow in turn, so it is pinned to the highest version both
-        accept and shared by every environment rather than diverging per-cloud.
+        turning a solvable set into ResolutionImpossible.
+
+        mlflow is pinned to 2.x deliberately, and taking the highest version
+        azureml-mlflow's cap allows is exactly the mistake this asserts against:
+        the cap is satisfiable by a release Azure ML cannot actually serve.
+        AML's tracking server implements the MLflow 2 REST surface and has no
+        /api/2.0/mlflow/logged-models, while MLflow 3's Model.log() calls
+        _create_logged_model unconditionally, so a 3.x pin resolves cleanly,
+        installs cleanly, trains to completion and only then fails on a 404.
         """
         pyproject = _read("pyproject.toml")
         self.assertIn('"azureml-mlflow==1.62.0.post5"', pyproject)
-        self.assertIn('"mlflow==3.13.0"', pyproject)
+        self.assertIn('"mlflow==2.22.5"', pyproject)
         self.assertNotRegex(pyproject, r'"azureml-mlflow[><~]')
+        # The failure mode is silent until a job runs against a real workspace,
+        # so guard the major version rather than only the exact string.
+        self.assertNotRegex(pyproject, r'"mlflow==3\.')
 
     def test_ci_builds_the_serving_target_it_scans(self) -> None:
         """The scan is also the only automated proof that the azure extra still

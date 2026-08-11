@@ -149,9 +149,10 @@ jobs:
           AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
         run: bash deploy/azure/run_training.sh dev
 
+      # Deliberately not gated on endpoint_enabled: the batch endpoint needs a
+      # model version too, and dev leaves the online endpoint off to save cost.
       - name: Resolve model version
         id: model
-        if: steps.tf.outputs.endpoint_enabled == 'true'
         env:
           AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
         run: |
@@ -162,7 +163,13 @@ jobs:
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --query "[].version" -o tsv | sort -n | tail -1)"
           fi
-          [[ -n "${version}" ]] || { echo "no registered model to deploy" >&2; exit 1; }
+          # Missing is only fatal where something must be deployed to. The online
+          # path cannot proceed without one; batch simply does not run, which is
+          # the correct outcome for an environment that has never trained.
+          if [[ -z "${version}" && "${{ steps.tf.outputs.endpoint_enabled }}" == "true" ]]; then
+            echo "no registered model to deploy" >&2
+            exit 1
+          fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy into the idle slot at 0% traffic
@@ -196,6 +203,33 @@ jobs:
           bash deploy/azure/promote_traffic.sh dev \
             "${{ steps.deploy.outputs.deployment }}" \
             "${{ steps.deploy.outputs.live_deployment }}"
+
+      # Batch has no traffic map and no warm slot, so there is nothing to
+      # promote: the deployment is created and becomes the endpoint's default in
+      # one step. Runs whenever a model version was resolved, independently of
+      # `endpoint_enabled` -- dev leaves the online endpoint off to save cost,
+      # and bulk scoring should still work there. Without this step the only
+      # thing that ever created a batch deployment was rollback_model.sh.
+      - name: Point the batch endpoint at the model
+        if: steps.model.outputs.version != ''
+        env:
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          FIRMAWARE_IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
+        run: bash deploy/azure/deploy_batch.sh dev "${{ steps.model.outputs.version }}"
+
+      # The online smoke test cannot stand in for this. Batch runs a different
+      # entry script on a different runtime, under a different identity, and
+      # writes through a different storage path -- every batch defect this
+      # project hit was invisible to the online path and to every unit test.
+      # It also proves the publish step, without which scoring succeeds and
+      # silently leaves the scores container empty.
+      - name: Batch smoke test
+        if: steps.model.outputs.version != ''
+        env:
+          AZURE_ML_WORKSPACE: ${{ steps.tf.outputs.workspace }}
+          AZURE_STORAGE_ACCOUNT: ${{ steps.tf.outputs.storage_account }}
+          FIRMAWARE_MODEL_VERSION: ${{ steps.model.outputs.version }}
+        run: bash deploy/azure/batch_smoke_test.sh dev
 
       # Runs last and still fails the job: a deploy that succeeded but left a
       # control broken is a failed deploy.

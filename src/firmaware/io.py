@@ -22,6 +22,7 @@ import re
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -423,6 +424,51 @@ def _scores_object_name(scored_at: str, run_id: str) -> str:
     return f"scores_{safe_timestamp}_{safe_run_id}.csv"
 
 
+def _if_missing() -> Any:
+    """The create-if-missing condition, resolved without importing azure eagerly.
+
+    `MatchConditions.IfMissing` is compared by identity inside the SDK, so the
+    real enum member has to be used whenever the SDK is present -- a duck-typed
+    stand-in would fail that comparison, the condition header would be dropped,
+    and the create would silently become an overwrite.
+
+    The fallback therefore exists for exactly one case: a caller that injected
+    its own client, which is how the tests prove the azure import stays lazy.
+    It is unreachable on Azure, because azure-core is a dependency of both
+    azure-identity and azure-storage-file-datalake.
+    """
+    try:
+        from azure.core import MatchConditions
+    except ImportError:
+        return Enum("MatchConditions", ["IfMissing"]).IfMissing
+    return MatchConditions.IfMissing
+
+
+def _create_append_flush(file_client: Any, payload: bytes) -> None:
+    """Write one score object with create-if-missing, append, flush.
+
+    Not `upload_data(overwrite=False)`, which is what this used to be and which
+    does not do what its name suggests on ADLS: with `overwrite=False` the SDK
+    appends to a path it never creates, so a brand-new score object fails with
+    `PathNotFound`. The old form only ever looked correct because the test double
+    implemented the intended semantics rather than the SDK's.
+
+    The three-call form is also the only shape the scores container accepts.
+    It carries a time-based immutability policy with protected append writes,
+    which permits append-style writes and refuses whole-blob uploads outright --
+    a single `Put Blob` of a file that does not exist yet still comes back 409
+    "blob is immutable due to a policy".
+
+    `IfMissing` sends `If-None-Match: *`, so the create is the ADLS counterpart
+    of GCS's `if_generation_match=0`: a re-run cannot quietly replace the
+    evidence of the previous one, and finds out at once rather than after
+    writing.
+    """
+    file_client.create_file(match_condition=_if_missing())
+    file_client.append_data(payload, offset=0, length=len(payload))
+    file_client.flush_data(len(payload))
+
+
 def write_scores(
     scores: pd.DataFrame,
     output_uri: str | Path,
@@ -440,9 +486,7 @@ def write_scores(
         service = client or _datalake_client(account)
         file_client = service.get_file_system_client(filesystem).get_file_client(name)
         payload = scores.to_csv(index=False, float_format="%.4f").encode("utf-8")
-        # overwrite=False is the ADLS counterpart of if_generation_match=0: a
-        # re-run cannot quietly replace the evidence of the previous one.
-        file_client.upload_data(payload, overwrite=False)
+        _create_append_flush(file_client, payload)
         return _abfss_uri(account, filesystem, name)
 
     if not is_gcs_uri(output_uri):
