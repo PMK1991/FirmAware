@@ -46,6 +46,23 @@ RUN apt-get update \
               /usr/local/lib/python3.11/site-packages/wheel-*.dist-info
 
 COPY --from=builder /opt/venv /opt/venv
+# pip is a build-time tool that a runtime image has no use for: the entrypoint
+# is the firmaware CLI and, on the serving stage, the AML inference server. It
+# is removed for the same reason as /usr/local's setuptools above.
+#
+# It is also the last remaining source of scan findings. pip vendors its own
+# copies of msgpack and setuptools under pip/_vendor and ships bom.cdx.json
+# describing them, which trivy reads as installed packages. Those copies only
+# execute when pip does, so this deletes genuinely unreachable code rather than
+# suppressing a report about it.
+#
+# Nothing here needs it at run time: the AML environments carry no conda_file,
+# so AML never resolves packages inside the container, and mlflow.pyfunc
+# load_model defaults to env_manager="local", which restores nothing.
+RUN rm -rf /opt/venv/lib/python3.11/site-packages/pip \
+           /opt/venv/lib/python3.11/site-packages/pip-*.dist-info \
+           /opt/venv/bin/pip /opt/venv/bin/pip3 /opt/venv/bin/pip3.11
+
 WORKDIR /app
 COPY --chown=firmaware:firmaware config.yaml ./config.yaml
 

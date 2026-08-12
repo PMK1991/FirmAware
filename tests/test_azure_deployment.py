@@ -320,6 +320,22 @@ class RuntimeImageTests(unittest.TestCase):
             self.assertIn(target, dockerfile)
         self.assertIn("rm -rf /usr/local/lib/python3.11/site-packages", dockerfile)
 
+    def test_pip_is_not_shipped_in_the_venv(self) -> None:
+        """pip vendors its own msgpack and setuptools and ships bom.cdx.json
+        describing them, which trivy reads as installed packages -- they were
+        the last two findings, and neither is upgradable because neither is
+        separately installed. A runtime image has no use for pip: the AML
+        environments carry no conda_file and pyfunc load_model defaults to
+        env_manager="local"."""
+        dockerfile = _read("Dockerfile")
+        self.assertIn("rm -rf /opt/venv/lib/python3.11/site-packages/pip", dockerfile)
+        removal = dockerfile.split("COPY --from=builder /opt/venv /opt/venv")[1]
+        self.assertLess(
+            removal.index("/opt/venv/bin/pip"),
+            removal.index("USER 10001:10001"),
+            "remove pip while still root, before the image drops privileges",
+        )
+
     def test_transitive_security_floors_are_declared(self) -> None:
         """msgpack arrives under the Azure SDKs, whose range was open enough for
         the resolver to pick a version with a fixed HIGH."""
