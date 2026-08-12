@@ -150,6 +150,199 @@ class AzureStorageTests(unittest.TestCase):
         policy = storage.split('resource "azurerm_storage_management_policy"')[1]
         self.assertNotIn('prefix_match = ["scores', policy)
 
+    def test_both_accounts_close_the_non_aad_paths(self) -> None:
+        """shared_access_key_enabled = false removes the account key, but SFTP
+        and NFS local users are a second credential model with their own
+        passwords, and they default to enabled."""
+        storage = _read("infra", "azure", "modules", "storage", "main.tf")
+        self.assertEqual(len(re.findall(r"local_user_enabled\s*=\s*false", storage)), 2)
+
+    def test_the_workspace_account_can_recover_a_deletion_too(self) -> None:
+        """It holds AML run history: the audit trail for every training run.
+        It had no blob_properties at all while the lake had 30-day retention."""
+        storage = _read("infra", "azure", "modules", "storage", "main.tf")
+        workspace = storage.split('resource "azurerm_storage_account" "workspace"')[1]
+        workspace = workspace.split('resource "azurerm_storage_container"')[0]
+        self.assertRegex(workspace, r"delete_retention_policy\s*\{\s*days\s*=\s*30")
+        self.assertRegex(
+            workspace, r"container_delete_retention_policy\s*\{\s*days\s*=\s*30"
+        )
+
+    def test_read_access_to_the_lake_is_logged(self) -> None:
+        """The "audit" category group covers StorageWrite and StorageDelete but
+        NOT StorageRead, so who read the data was the missing half."""
+        storage = _read("infra", "azure", "modules", "storage", "main.tf")
+        diag = storage.split('resource "azurerm_monitor_diagnostic_setting" "blob"')[1]
+        for category in ("StorageRead", "StorageWrite", "StorageDelete"):
+            self.assertRegex(diag, rf'category\s*=\s*"{category}"')
+
+
+class AzureNetworkTests(unittest.TestCase):
+    def test_every_subnet_is_associated_with_an_nsg(self) -> None:
+        """snet-scoring had none while its two siblings each did. A subnet with
+        no NSG still routes perfectly, so nothing surfaces the omission."""
+        network = _read("infra", "azure", "modules", "network", "main.tf")
+        subnets = set(re.findall(r'resource "azurerm_subnet" "(\w+)"', network))
+        associated = set(
+            re.findall(
+                r'resource "azurerm_subnet_network_security_group_association" "(\w+)"',
+                network,
+            )
+        )
+        self.assertEqual(subnets, associated, "every subnet needs an NSG association")
+        for name in subnets:
+            with self.subTest(subnet=name):
+                self.assertRegex(
+                    network, rf'resource "azurerm_network_security_group" "{name}"'
+                )
+
+
+class CheckovSuppressionTests(unittest.TestCase):
+    """checkov runs with soft_fail: false, so a suppression is a real decision.
+
+    Every skip has to carry a reason, and the reason has to say something. A
+    bare `#checkov:skip=CKV_x` silently converts a blocking control into no
+    control at all, and reads in a diff exactly like the fix.
+    """
+
+    TERRAFORM = sorted((ROOT / "infra" / "azure").rglob("*.tf"))
+
+    def test_every_suppression_explains_itself(self) -> None:
+        found = 0
+        for path in self.TERRAFORM:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if "checkov:skip=" not in line:
+                    continue
+                found += 1
+                rule = line.split("checkov:skip=", 1)[1].strip()
+                with self.subTest(file=path.name, rule=rule[:40]):
+                    self.assertIn(":", rule, "a skip must be CKV_ID:reason")
+                    check_id, _, reason = rule.partition(":")
+                    self.assertRegex(check_id, r"^CKV2?_[A-Z]+_\d+$")
+                    self.assertGreater(
+                        len(reason.strip()),
+                        40,
+                        "state why the control does not apply, not that it does not",
+                    )
+        self.assertGreater(found, 0, "the suppressions moved; this test is now blind")
+
+    def test_suppressions_are_scoped_to_resources_not_the_whole_scan(self) -> None:
+        """A config-file skip list applies everywhere, including to resources
+        added later that nobody assessed. Inline skips cannot spread."""
+        for name in (".checkov.yaml", ".checkov.yml", "infra/azure/.checkov.yaml"):
+            self.assertFalse(
+                (ROOT / name).exists(),
+                f"{name} would suppress globally; keep skips on the resource",
+            )
+        workflow = _read(".github", "workflows", "azure-ci.yaml")
+        checkov = workflow.split("name: Checkov")[1].split("- name:")[0]
+        self.assertIn("soft_fail: false", checkov)
+        self.assertNotIn("skip_check", checkov)
+
+    def test_checkov_does_not_write_the_report_gitleaks_needs(self) -> None:
+        """The checkov action runs as root and writes results.sarif into the
+        workspace. Gitleaks, later in the same job, then cannot overwrite it:
+        it reports no leaks and dies on 'permission denied', which reads
+        exactly like a leak was found."""
+        workflow = _read(".github", "workflows", "azure-ci.yaml")
+        checkov = workflow.split("name: Checkov")[1].split("- name:")[0]
+        self.assertIn("output_format: cli", checkov)
+        self.assertNotIn("output_format: cli,sarif", checkov)
+        self.assertNotIn("output_file_path", checkov)
+        self.assertNotIn(
+            "codeql-action/upload-sarif", workflow, "then the SARIF would be needed"
+        )
+
+
+class TrivySuppressionTests(unittest.TestCase):
+    """Trivy blocks on HIGH and CRITICAL because dev runs a Basic registry,
+    where ACR quarantine is unavailable. Suppressions are the hole in that, so
+    they have to be visible, argued, and confined to the one pin that forces
+    them."""
+
+    IGNOREFILE = ROOT / ".trivyignore"
+
+    def _entries(self) -> list[str]:
+        return [
+            line.strip()
+            for line in self.IGNOREFILE.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+    def test_trivy_still_blocks(self) -> None:
+        workflow = _read(".github", "workflows", "azure-ci.yaml")
+        trivy = workflow.split("name: Trivy")[1]
+        self.assertIn('exit-code: "1"', trivy)
+        self.assertIn("severity: HIGH,CRITICAL", trivy)
+        self.assertIn("trivyignores: .trivyignore", trivy)
+        self.assertNotIn("skip-", trivy, "suppress in the ignore file, with a reason")
+
+    def test_every_entry_is_a_cve_or_advisory_id(self) -> None:
+        entries = self._entries()
+        self.assertGreater(entries, [], "the ignore file emptied; this test is blind")
+        for entry in entries:
+            with self.subTest(entry=entry):
+                self.assertRegex(entry, r"^(CVE-\d{4}-\d+|GHSA(-[a-z0-9]{4}){3})$")
+
+    def test_the_justifications_are_written_down(self) -> None:
+        """A bare ID list is indistinguishable from a list nobody read."""
+        text = self.IGNOREFILE.read_text(encoding="utf-8")
+        comments = [ln for ln in text.splitlines() if ln.strip().startswith("#")]
+        self.assertGreater(len(comments), len(self._entries()))
+        for phrase in ("mlflow==2.22.5", "tracking server", "pyarrow<20"):
+            self.assertIn(phrase, text, "the reachability argument has been lost")
+
+    def test_suppressions_do_not_outlive_the_pin_that_forces_them(self) -> None:
+        """Every entry exists because MLflow cannot move while Azure ML serves
+        the MLflow 2 REST surface. If either pin is ever lifted, the file has to
+        be re-argued from scratch rather than carried forward."""
+        pyproject = _read("pyproject.toml")
+        self.assertIn('"mlflow==2.22.5"', pyproject)
+        self.assertNotRegex(pyproject, r'"mlflow==3\.')
+        self.assertIn('"azureml-mlflow==1.62.0.post5"', pyproject)
+
+    def test_no_floor_is_declared_for_a_capped_dependency(self) -> None:
+        """cryptography is suppressed rather than raised because azureml-mlflow
+        declares cryptography<49.0.0 and both fixes are 49 and 50. A floor here
+        makes the set unsolvable, so the image stops building instead of
+        starting to fail the scan."""
+        pyproject = _read("pyproject.toml")
+        self.assertNotIn('"cryptography>=', pyproject)
+
+
+class RuntimeImageTests(unittest.TestCase):
+    def test_the_base_image_build_toolchain_is_removed(self) -> None:
+        """The venv is built without --system-site-packages and is first on
+        PATH, so /usr/local's setuptools is unreachable code that still carries
+        CVEs through its vendored jaraco.context and wheel."""
+        dockerfile = _read("Dockerfile")
+        for target in ("site-packages/setuptools", "site-packages/pkg_resources"):
+            self.assertIn(target, dockerfile)
+        self.assertIn("rm -rf /usr/local/lib/python3.11/site-packages", dockerfile)
+
+    def test_pip_is_not_shipped_in_the_venv(self) -> None:
+        """pip vendors its own msgpack and setuptools and ships bom.cdx.json
+        describing them, which trivy reads as installed packages -- they were
+        the last two findings, and neither is upgradable because neither is
+        separately installed. A runtime image has no use for pip: the AML
+        environments carry no conda_file and pyfunc load_model defaults to
+        env_manager="local"."""
+        dockerfile = _read("Dockerfile")
+        self.assertIn("rm -rf /opt/venv/lib/python3.11/site-packages/pip", dockerfile)
+        removal = dockerfile.split("COPY --from=builder /opt/venv /opt/venv")[1]
+        self.assertLess(
+            removal.index("/opt/venv/bin/pip"),
+            removal.index("USER 10001:10001"),
+            "remove pip while still root, before the image drops privileges",
+        )
+
+    def test_transitive_security_floors_are_declared(self) -> None:
+        """msgpack arrives under the Azure SDKs, whose range was open enough for
+        the resolver to pick a version with a fixed HIGH."""
+        pyproject = _read("pyproject.toml")
+        azure = pyproject.split("azure = [")[1].split("]")[0]
+        self.assertIn('"msgpack>=', azure)
+
 
 class AzurePolicyTests(unittest.TestCase):
     def test_six_mandatory_tags_are_required_by_policy(self) -> None:
@@ -645,6 +838,76 @@ class AzureAssetRegistrationTests(unittest.TestCase):
         for route in ("liveness_route", "readiness_route", "scoring_route"):
             self.assertEqual(inference[route]["port"], port)
         self.assertEqual(inference["scoring_route"]["path"], "/score")
+
+
+class DockerfileTargetTests(unittest.TestCase):
+    """A multi-stage Dockerfile has no safe default target.
+
+    `docker build` with no --target builds the LAST stage in the file, so
+    appending the `azureml` serving stage retargeted every consumer that had
+    relied on the default. The shared CI job started building the inference
+    server instead of the CLI and failed the stage's own import guard; the GCP
+    build would have pushed that image to Cloud Run Jobs, where its entrypoint
+    is not the firmaware CLI at all. Neither build mentions `azureml`, so
+    neither would have been an obvious suspect.
+    """
+
+    def test_the_last_stage_is_the_one_that_forced_this(self) -> None:
+        stages = re.findall(r"^FROM\s+\S+\s+AS\s+(\S+)", _read("Dockerfile"), re.MULTILINE)
+        self.assertEqual(stages[-1], "azureml", "the default target changed; recheck every build")
+        self.assertIn("runtime", stages)
+
+    def test_every_build_names_its_target(self) -> None:
+        builds = {
+            (".github/workflows/ci.yaml", "target: runtime"),
+            (".github/workflows/azure-ci.yaml", "--target azureml"),
+            ("deploy/gcp/build.sh", "--target runtime"),
+            ("deploy/azure/build.sh", "--target azureml"),
+        }
+        for path, expected in builds:
+            with self.subTest(path=path):
+                self.assertIn(expected, _read(*path.split("/")))
+
+
+class AzureResourceGroupTests(unittest.TestCase):
+    """The resource group is Terraform's to decide, and only Terraform's.
+
+    dev overrides the conventional rg-<prefix> name with a single shared group,
+    but the deploy workflows carried the convention as a literal. The mismatch
+    is silent: `az acr list -g <missing-group>` returns an empty list rather
+    than an error, so the run fails several steps later on an empty registry
+    name that points at nothing.
+    """
+
+    @staticmethod
+    def _declared(env_name: str) -> str | None:
+        tfvars = _read("infra", "azure", "envs", f"{env_name}.tfvars")
+        found = re.search(r'^resource_group_name\s*=\s*"([^"]*)"', tfvars, re.MULTILINE)
+        return found.group(1) if found else None
+
+    def test_the_resolver_default_matches_what_terraform_would_pick(self) -> None:
+        main = _read("infra", "azure", "main.tf")
+        self.assertIn('name_prefix = "firmaware-${var.env}"', main)
+        self.assertRegex(main, r'coalesce\(\s*var\.resource_group_name,\s*"rg-\$\{local\.name_prefix\}"')
+        resolver = _read("deploy", "azure", "resource_group.sh")
+        self.assertIn('resource_group="rg-firmaware-${env_name}"', resolver)
+
+    def test_workflows_resolve_the_group_instead_of_restating_it(self) -> None:
+        for name in ("azure-deploy-dev.yaml", "azure-deploy-prod.yaml"):
+            with self.subTest(workflow=name):
+                workflow = _read(".github", "workflows", name)
+                self.assertIn("deploy/azure/resource_group.sh", workflow)
+                # Any literal at all, right or wrong: dev's was right once too.
+                self.assertNotRegex(
+                    workflow,
+                    r"RESOURCE_GROUP:\s*\S",
+                    "resolve the group from the tfvars rather than hardcoding it",
+                )
+
+    def test_dev_still_uses_the_single_group_that_is_actually_deployed(self) -> None:
+        # Live dev is one group named firmAware. Changing this without moving
+        # the resources orphans everything the workflows then fail to find.
+        self.assertEqual(self._declared("dev"), "firmAware")
 
 
 class AzureSecurityCheckTests(unittest.TestCase):

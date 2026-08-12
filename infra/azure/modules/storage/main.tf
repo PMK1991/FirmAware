@@ -13,6 +13,11 @@ locals {
 }
 
 resource "azurerm_storage_account" "this" {
+  # checkov:skip=CKV_AZURE_59:public access is disabled by public_network_access_enabled = !var.network_isolation, and allow_nested_items_to_be_public is false unconditionally
+  # checkov:skip=CKV2_AZURE_33:the private endpoint is created by module.network, count-gated on the same variable
+  # checkov:skip=CKV_AZURE_206:LRS in dev, ZRS in prod. Cross-region GRS is a deliberate no: the lake is reproducible from versioned inputs, and asynchronous geo-replication of an immutability-protected container would put scores in a second region that the retention policy does not govern
+  # checkov:skip=CKV2_AZURE_1:platform-managed keys, plus infrastructure_encryption_enabled for a second layer. A CMK moves the availability of every score onto a key this same deployment would own, and buys nothing against the threat model here
+  # checkov:skip=CKV_AZURE_33:queue logging is not configurable on this account. A hierarchical namespace precludes the Queue service, and the provider configures queue_properties over the data plane, which needs the shared key that is deliberately disabled
   name                     = "st${replace(var.name_prefix, "-", "")}${var.unique_suffix}"
   location                 = var.location
   resource_group_name      = var.resource_group_name
@@ -37,6 +42,12 @@ resource "azurerm_storage_account" "this" {
   # Encryption of the physical media underneath Azure's own at-rest encryption.
   # Set at creation and immutable afterwards.
   infrastructure_encryption_enabled = true
+
+  # SFTP/NFS local users are the one remaining way to reach this account without
+  # an AAD identity -- they carry their own passwords or SSH keys, which is the
+  # credential model shared_access_key_enabled = false exists to eliminate. The
+  # default is enabled, so it has to be said.
+  local_user_enabled = false
 
   blob_properties {
     # No versioning_enabled or change_feed_enabled here: both are unsupported on
@@ -88,6 +99,11 @@ resource "azurerm_storage_account" "this" {
 # container-scoped RBAC in the identity module. That is why this account carries
 # no containers, no immutability policy and no lifecycle rules.
 resource "azurerm_storage_account" "workspace" {
+  # checkov:skip=CKV_AZURE_59:public access is disabled by public_network_access_enabled = !var.network_isolation, and allow_nested_items_to_be_public is false unconditionally
+  # checkov:skip=CKV2_AZURE_33:the private endpoint is created by module.network, count-gated on the same variable
+  # checkov:skip=CKV_AZURE_206:LRS in dev, ZRS in prod. This account holds AML run history, which is reconstructible; it is not the system of record for anything
+  # checkov:skip=CKV2_AZURE_1:platform-managed keys plus infrastructure_encryption_enabled, matching the lake
+  # checkov:skip=CKV_AZURE_33:the Queue service is unused here, and queue_properties is a data-plane setting the provider cannot write with shared keys disabled
   name                     = "stw${replace(var.name_prefix, "-", "")}${var.unique_suffix}"
   location                 = var.location
   resource_group_name      = var.resource_group_name
@@ -103,6 +119,23 @@ resource "azurerm_storage_account" "workspace" {
   # account with the workspace's managed identity.
   shared_access_key_enabled         = false
   infrastructure_encryption_enabled = true
+  local_user_enabled                = false
+
+  # AML writes run history, job snapshots and notebook state here. Losing that
+  # is losing the audit trail for a training run, so it gets the same 30-day
+  # recovery window as the lake. Versioning and change feed are available on
+  # this account -- unlike the lake, it has no hierarchical namespace -- but
+  # they are not the control being bought here: soft delete is what makes an
+  # accidental delete recoverable.
+  blob_properties {
+    delete_retention_policy {
+      days = 30
+    }
+
+    container_delete_retention_policy {
+      days = 30
+    }
+  }
 
   public_network_access_enabled = !var.network_isolation
 
@@ -116,6 +149,7 @@ resource "azurerm_storage_account" "workspace" {
 }
 
 resource "azurerm_storage_container" "this" {
+  # checkov:skip=CKV2_AZURE_21:this check requires azurerm_log_analytics_storage_insights, whose storage_account_key argument is REQUIRED by the provider. This account has shared_access_key_enabled = false, so no such key exists to supply -- the check asks for the one credential this design exists to eliminate. Blob read logging is instead delivered by the StorageRead/StorageWrite/StorageDelete diagnostic setting below, which authenticates as the platform and needs no key.
   for_each = local.containers
 
   name                  = each.key
@@ -176,8 +210,20 @@ resource "azurerm_monitor_diagnostic_setting" "blob" {
   target_resource_id         = "${azurerm_storage_account.this.id}/blobServices/default"
   log_analytics_workspace_id = var.log_analytics_workspace_id
 
+  # Named categories rather than the "audit" group, because "audit" covers
+  # StorageWrite and StorageDelete but NOT StorageRead. On a data lake holding
+  # the inputs and the scored outputs, who read the data is the half of the
+  # audit trail that matters most, and it was the half that was missing.
   enabled_log {
-    category_group = "audit"
+    category = "StorageRead"
+  }
+
+  enabled_log {
+    category = "StorageWrite"
+  }
+
+  enabled_log {
+    category = "StorageDelete"
   }
 
   enabled_metric {

@@ -1,4 +1,6 @@
 resource "azurerm_machine_learning_workspace" "this" {
+  # checkov:skip=CKV2_AZURE_49:network access is governed by public_network_access_enabled = !var.network_isolation plus a managed VNet in AllowOnlyApprovedOutbound mode; prod sets both
+  # checkov:skip=CKV2_AZURE_50:the same variable closes the public path on both storage accounts, and high_business_impact is on in prod
   name                = "mlw-${var.name_prefix}"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -61,7 +63,12 @@ resource "azurerm_machine_learning_compute_cluster" "this" {
   }
 
   # No ssh_public_access_enabled block and no admin credentials: nothing logs
-  # into a training node interactively.
+  # into a training node interactively. local_auth_enabled goes further and
+  # removes the key-based path to the cluster entirely, so the only way to
+  # submit work is an AAD identity holding an explicit role -- which is how
+  # every job here already runs.
+  local_auth_enabled = false
+
   identity {
     type         = "UserAssigned"
     identity_ids = [var.workspace_identity_id]

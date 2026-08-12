@@ -32,6 +32,17 @@ resource "azurerm_application_insights" "this" {
 }
 
 resource "azurerm_container_registry" "this" {
+  # Premium-only capabilities, and dev deliberately runs Basic. Prod sets
+  # registry_sku = "Premium", where geo-replication, zone redundancy, dedicated
+  # data endpoints and content trust all become available -- but checkov reads
+  # the module source with variable defaults, so it cannot see that.
+  #
+  # checkov:skip=CKV_AZURE_165:geo-replication is Premium-only; prod is Premium, dev is Basic by design
+  # checkov:skip=CKV_AZURE_233:zone redundancy is Premium-only; same split
+  # checkov:skip=CKV_AZURE_237:dedicated data endpoints are Premium-only; same split
+  # checkov:skip=CKV_AZURE_164:content trust is Premium-only, and images are already pinned by digest everywhere they are consumed
+  # checkov:skip=CKV_AZURE_166:quarantine IS enabled where it can be, by quarantine_policy_enabled = var.registry_sku == "Premium". On a Basic dev registry the feature does not exist, and the equivalent gate is the blocking Trivy scan in CI
+  # checkov:skip=CKV_AZURE_139:public access IS disabled, by public_network_access_enabled = !var.network_isolation, which checkov cannot evaluate
   name                = "cr${replace(var.name_prefix, "-", "")}${var.unique_suffix}"
   location            = var.location
   resource_group_name = azurerm_resource_group.this.name
@@ -54,6 +65,13 @@ resource "azurerm_container_registry" "this" {
 }
 
 resource "azurerm_key_vault" "this" {
+  # Both of these ARE implemented, behind var.network_isolation: prod sets it
+  # true, which flips public_network_access_enabled to false and instantiates
+  # the private endpoint in the network module. checkov evaluates the module
+  # source with defaults and cannot resolve either the ternary or the count.
+  #
+  # checkov:skip=CKV_AZURE_189:public access is disabled by !var.network_isolation, which prod sets
+  # checkov:skip=CKV2_AZURE_32:the private endpoint is created by module.network, count-gated on the same variable
   name                = "kv-${substr(replace(var.name_prefix, "firmaware", "fa"), 0, 14)}-${var.unique_suffix}"
   location            = var.location
   resource_group_name = azurerm_resource_group.this.name

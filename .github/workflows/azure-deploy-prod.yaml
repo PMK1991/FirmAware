@@ -41,8 +41,9 @@ concurrency:
   group: azure-deploy-prod
   cancel-in-progress: false
 
+# AZURE_RESOURCE_GROUP is deliberately absent: both jobs read it from the tfvars
+# so Terraform stays the only thing that decides it.
 env:
-  AZURE_RESOURCE_GROUP: rg-firmaware-prod
   TF_VAR_FILE: envs/prod.tfvars
 
 jobs:
@@ -58,6 +59,15 @@ jobs:
       source: ${{ steps.resolve.outputs.source }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # dev's group is read from dev's tfvars, not restated here. A wrong group
+      # is silent in this job specifically: the provenance queries would find no
+      # endpoint and conclude dev is serving nothing.
+      - name: Resolve dev resource group
+        run: |
+          rg="$(bash deploy/azure/resource_group.sh dev)"
+          echo "DEV_RESOURCE_GROUP=${rg}" >> "$GITHUB_ENV"
+          echo "dev resource group: ${rg}"
 
       - name: Azure login (OIDC)
         uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
@@ -77,7 +87,6 @@ jobs:
         env:
           REQUESTED: ${{ inputs.image_digest }}
           REQUESTED_MODEL: ${{ inputs.model_version }}
-          DEV_RESOURCE_GROUP: rg-firmaware-dev
           DEV_WORKSPACE: mlw-firmaware-dev
         run: |
           set -euo pipefail
@@ -168,6 +177,12 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Resolve resource group
+        run: |
+          rg="$(bash deploy/azure/resource_group.sh prod)"
+          echo "AZURE_RESOURCE_GROUP=${rg}" >> "$GITHUB_ENV"
+          echo "resource group: ${rg}"
 
       - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:

@@ -24,29 +24,12 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC_DIR = ROOT / "deploy" / "azure" / "azureml"
+SCRIPT_DIR = ROOT / "deploy" / "azure"
 
-# Every placeholder the release scripts know how to substitute. A YAML file that
-# uses anything outside this set would reach Azure with the literal text intact.
-SUBSTITUTED = {
-    "ENV",
-    "MODEL_VERSION",
-    "IMAGE_DIGEST",
-    "INSTANCE_TYPE",
-    "MIN_INSTANCES",
-    "WORKSPACE_MLFLOW_URI",
-    "ACR_LOGIN_SERVER",
-    # The four mandatory tags a Deny policy enforces at resource-group scope.
-    # Deployments are created by `az ml`, not Terraform, so the tags cannot come
-    # from the provider's default_tags and have to be rendered in.
-    "OWNER",
-    "COST_CENTER",
-    "DATA_CLASSIFICATION",
-    "MANAGED_BY",
-    # Terraform owns the endpoints, so this one is resolved from a Terraform
-    # output rather than by a release script. The file is the reviewable
-    # declaration of what the azapi resource creates.
-    "ENDPOINT_IDENTITY_RESOURCE_ID",
-}
+# Placeholders that no release script substitutes because nothing renders them:
+# Terraform owns the online endpoint, and this value is one of its outputs. The
+# file is the reviewable declaration of what the azapi resource creates.
+RESOLVED_OUTSIDE_THE_SCRIPTS = {"ENDPOINT_IDENTITY_RESOURCE_ID"}
 
 # Not an az ml spec: the application's own training config, read by the pipeline
 # steps rather than submitted to Azure.
@@ -54,12 +37,44 @@ NOT_AZURE_ML_SPECS = {"config.azure.yaml"}
 
 PLACEHOLDER = re.compile(r"\$\{\{([A-Z_]+)\}\}")
 
+# Every renderer in deploy/azure passes its values as environment assignments on
+# the continued line that invokes python3, so an assignment ending in a
+# backslash is exactly a placeholder some script provides.
+RENDERER_ASSIGNMENT = re.compile(r"^([A-Z][A-Z0-9_]*)=.*\\$", re.MULTILINE)
+
+
+def substituted_placeholders() -> set[str]:
+    """Read the names the release scripts actually provide.
+
+    This used to be a literal set maintained by hand, which drifted the first
+    time a script started rendering a new spec: the four placeholders in
+    job-publish-scores.yaml were all substituted correctly by
+    run_batch_scoring.sh, and the check failed anyway because nobody had
+    updated the list. A check that reports a working deploy as broken gets
+    edited to agree with the code, so it may as well read the code.
+    """
+    provided: set[str] = set()
+    for script in sorted(SCRIPT_DIR.glob("*.sh")):
+        provided |= set(RENDERER_ASSIGNMENT.findall(script.read_text(encoding="utf-8")))
+    return provided | RESOLVED_OUTSIDE_THE_SCRIPTS
+
 
 def main() -> int:
     problems: list[str] = []
     specs = sorted(SPEC_DIR.rglob("*.yaml"))
     if not specs:
         print(f"no Azure ML specs found under {SPEC_DIR}", file=sys.stderr)
+        return 1
+
+    substituted = substituted_placeholders()
+    # If the renderers change shape, the derivation returns nothing and every
+    # placeholder passes. Fail on the empty set rather than on nothing at all.
+    if not substituted - RESOLVED_OUTSIDE_THE_SCRIPTS:
+        print(
+            f"no rendered placeholders found in {SCRIPT_DIR}; "
+            "the renderers changed shape and this check is now blind",
+            file=sys.stderr,
+        )
         return 1
 
     for path in specs:
@@ -80,7 +95,7 @@ def main() -> int:
         if path.name not in NOT_AZURE_ML_SPECS and "$schema" not in document:
             problems.append(f"{relative}: no $schema, so az ml cannot validate it")
 
-        for name in sorted(set(PLACEHOLDER.findall(text)) - SUBSTITUTED):
+        for name in sorted(set(PLACEHOLDER.findall(text)) - substituted):
             problems.append(
                 f"{relative}: placeholder {name} is never substituted by a release script"
             )
