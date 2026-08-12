@@ -158,6 +158,11 @@ jobs:
       # Blocking on HIGH and CRITICAL is the compensating control for running a
       # Basic registry in dev, where ACR quarantine is unavailable. It is not a
       # nice-to-have; it is the only thing standing in that gap.
+      #
+      # .trivyignore holds the only exceptions, each with its reachability
+      # argument written out. It is deliberately a file in the repo rather than
+      # a `skip` input here, so an exception has to arrive through review and
+      # shows up in blame.
       - name: Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -166,3 +171,4 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
           severity: HIGH,CRITICAL
+          trivyignores: .trivyignore

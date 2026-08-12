@@ -73,6 +73,17 @@ azure = [
   # it in the image, a custom-image deployment with a scoring_script fails to
   # start.
   "azureml-inference-server-http>=1.0,<2",
+  # A transitive floor, not a direct import. Nothing in this project calls
+  # msgpack; it arrives under the Azure SDKs, whose own range was open enough
+  # that the resolver settled on a version carrying a fixed HIGH. Trivy blocks
+  # the build on that, so this floor is what keeps the image shippable. Raise
+  # it when trivy next says to.
+  #
+  # cryptography deliberately has no floor here, though trivy flags it too:
+  # azureml-mlflow declares cryptography<49.0.0 and both fix versions are 49
+  # and 50, so a floor makes the set unsolvable rather than secure. It is
+  # recorded in .trivyignore with the rest of the pin's consequences.
+  "msgpack>=1.2.1",
 ]
 dev = [
   "pytest>=8.0,<9",

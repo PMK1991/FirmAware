@@ -1,0 +1,106 @@
+# Trivy suppressions for the FirmAware image.
+#
+# Every entry here is a HIGH or CRITICAL finding that trivy can see a fix for
+# and that this project cannot take. Nothing else is suppressed: the Trivy step
+# in .github/workflows/azure-ci.yaml still runs with exit-code 1 on HIGH and
+# CRITICAL, and that gate is the compensating control for running a Basic
+# container registry in dev, where ACR quarantine is unavailable. An entry that
+# is not written down here fails the build.
+#
+# ---------------------------------------------------------------------------
+# Why these cannot be fixed
+# ---------------------------------------------------------------------------
+#
+# Every entry descends from the two pins that make this image work on Azure ML:
+# mlflow==2.22.5 in the `train` extra, and azureml-mlflow==1.62.0.post5 in the
+# `azure` extra. In each case the version trivy wants is one the pin forbids,
+# so a bump is not a trade-off between security and convenience; it is a set of
+# requirements with no solution.
+#
+# mlflow==2.22.5 is a hard Azure ML constraint, not caution. AML's hosted
+# tracking server implements the MLflow 2 REST surface and has no
+# /api/2.0/mlflow/logged-models endpoint. MLflow 3's Model.log() calls
+# _create_logged_model unconditionally -- no flag, no env var, no fallback --
+# so every log_model against an AML workspace dies on a 404 *after* training
+# has finished. Every mlflow fix version trivy names below is 3.x.
+#
+# What makes that acceptable rather than merely unavoidable is where the
+# vulnerable code lives. With one exception noted below, the mlflow entries are
+# all flaws in the *tracking server* and *model server*: the artifact HTTP
+# handler, the `mlflow server` / `mlflow ui` Flask app, its authentication
+# layer, and `mlflow models serve`. This image runs none of that. It uses
+# MLflow purely as a client library -- mlflow.log_metric, mlflow.log_artifact,
+# mlflow.pyfunc.load_model -- against the AML-hosted server. It has no
+# entrypoint that starts an MLflow server, publishes no MLflow port, and the
+# AML managed online endpoint serves through azureml-inference-server-http, not
+# through MLflow. The reachable attack surface for these CVEs is not present.
+#
+# Reviewed against the deployed posture: the image runs as uid 10001, the
+# workspace is behind private endpoints when network_isolation is on, and the
+# only untrusted input the container handles is the scoring payload, which is
+# schema-validated before any MLflow call.
+#
+# Re-check when azureml-mlflow declares a floor above mlflow 3, or when AML's
+# tracking server grows /api/2.0/mlflow/logged-models. Either removes the pins
+# and with them every line below.
+
+# --- mlflow 2.22.5: tracking-server path traversal / arbitrary file read -----
+# Reached through the server's artifact HTTP handlers. Not served here.
+CVE-2025-15036
+CVE-2025-15031
+CVE-2026-2033
+CVE-2026-2614
+
+# --- mlflow 2.22.5: command / code execution in the server and model serving -
+# Reached through `mlflow models serve` and the recipe/deployment entrypoints.
+# This image serves via azureml-inference-server-http and never invokes them.
+CVE-2025-15379
+CVE-2026-0596
+CVE-2026-2651
+CVE-2026-4137
+CVE-2025-14287
+
+# --- mlflow 2.22.5: authentication and request forgery in the server ---------
+# The default-password, auth-bypass, SSRF and DNS-rebinding issues are all in
+# the Flask app's auth and proxy layers. Authentication to the tracking store
+# here is Entra ID via azureml-mlflow; MLflow's own auth is never loaded.
+CVE-2026-2635
+CVE-2026-2652
+CVE-2026-2393
+CVE-2025-14279
+CVE-2026-4035
+
+# --- mlflow 2.22.5: insecure temporary directory ------------------------------
+# The one client-side item. It needs a local attacker already executing code
+# inside the container to win a race in /tmp. The container is single-purpose,
+# non-root, and runs one process; an attacker in a position to exploit this
+# already has everything this would grant.
+CVE-2025-10279
+
+# --- pyarrow 19.0.1 -----------------------------------------------------------
+# Not a separate decision: mlflow 2.22.5 declares pyarrow<20, so the fix
+# version trivy wants (23.0.1) is unreachable while the pin above stands. The
+# flaw is a denial of service when parsing malformed Arrow IPC or Parquet
+# input; this image reads only Parquet and CSV it wrote itself, from storage
+# accounts with shared-key auth disabled.
+CVE-2026-25087
+
+# --- cryptography 48.0.1 -------------------------------------------------------
+# The other pin: azureml-mlflow 1.62.0.post5 declares cryptography<49.0.0, and
+# the two fixes are 49.0.0 and 50.0.0. Adding a floor produces
+# ResolutionImpossible, not a patched image -- verified with pip.
+#
+# CVE-2026-69247 is a Bleichenbacher oracle in PKCS#7 EnvelopedData decryption
+# (pkcs7_decrypt_der / _pem / _smime). Exploiting it requires an application
+# that decrypts attacker-supplied PKCS#7 or S/MIME with its own private key and
+# reflects the outcome. This project never calls those functions; it has no
+# S/MIME or PKCS#7 path at all.
+#
+# CVE-2026-69249 is exponential backtracking in cryptography's own X.509 chain
+# builder when a chain repeats a self-signed intermediate. That verifier is the
+# `cryptography.x509.verification` API. Nothing here uses it: TLS chain
+# validation on every outbound call goes through OpenSSL under requests and
+# urllib3 against certifi's trust store, and the container makes no inbound TLS
+# connections -- AML terminates TLS at the endpoint, ahead of the image.
+CVE-2026-69247
+CVE-2026-69249

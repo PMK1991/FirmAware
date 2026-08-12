@@ -31,7 +31,19 @@ RUN apt-get update \
     && apt-get install --no-install-recommends --yes libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 firmaware \
-    && useradd --uid 10001 --gid firmaware --create-home firmaware
+    && useradd --uid 10001 --gid firmaware --create-home firmaware \
+    # The base image ships its own setuptools under /usr/local, and it vendors
+    # jaraco.context and wheel copies that carry their own CVEs. Nothing here
+    # can reach any of it: the venv is built without --system-site-packages and
+    # is first on PATH, so /opt/venv/bin/python never looks at /usr/local's
+    # site-packages. Deleting it is a real reduction in attack surface rather
+    # than a suppression, and it also removes the build-time toolchain from a
+    # runtime image that has no business compiling anything.
+    && rm -rf /usr/local/lib/python3.11/site-packages/setuptools \
+              /usr/local/lib/python3.11/site-packages/setuptools-*.dist-info \
+              /usr/local/lib/python3.11/site-packages/pkg_resources \
+              /usr/local/lib/python3.11/site-packages/wheel \
+              /usr/local/lib/python3.11/site-packages/wheel-*.dist-info
 
 COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app

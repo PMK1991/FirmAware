@@ -239,6 +239,94 @@ class CheckovSuppressionTests(unittest.TestCase):
         self.assertIn("soft_fail: false", checkov)
         self.assertNotIn("skip_check", checkov)
 
+    def test_checkov_does_not_write_the_report_gitleaks_needs(self) -> None:
+        """The checkov action runs as root and writes results.sarif into the
+        workspace. Gitleaks, later in the same job, then cannot overwrite it:
+        it reports no leaks and dies on 'permission denied', which reads
+        exactly like a leak was found."""
+        workflow = _read(".github", "workflows", "azure-ci.yaml")
+        checkov = workflow.split("name: Checkov")[1].split("- name:")[0]
+        self.assertIn("output_format: cli", checkov)
+        self.assertNotIn("output_format: cli,sarif", checkov)
+        self.assertNotIn("output_file_path", checkov)
+        self.assertNotIn(
+            "codeql-action/upload-sarif", workflow, "then the SARIF would be needed"
+        )
+
+
+class TrivySuppressionTests(unittest.TestCase):
+    """Trivy blocks on HIGH and CRITICAL because dev runs a Basic registry,
+    where ACR quarantine is unavailable. Suppressions are the hole in that, so
+    they have to be visible, argued, and confined to the one pin that forces
+    them."""
+
+    IGNOREFILE = ROOT / ".trivyignore"
+
+    def _entries(self) -> list[str]:
+        return [
+            line.strip()
+            for line in self.IGNOREFILE.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+    def test_trivy_still_blocks(self) -> None:
+        workflow = _read(".github", "workflows", "azure-ci.yaml")
+        trivy = workflow.split("name: Trivy")[1]
+        self.assertIn('exit-code: "1"', trivy)
+        self.assertIn("severity: HIGH,CRITICAL", trivy)
+        self.assertIn("trivyignores: .trivyignore", trivy)
+        self.assertNotIn("skip-", trivy, "suppress in the ignore file, with a reason")
+
+    def test_every_entry_is_a_cve_or_advisory_id(self) -> None:
+        entries = self._entries()
+        self.assertGreater(entries, [], "the ignore file emptied; this test is blind")
+        for entry in entries:
+            with self.subTest(entry=entry):
+                self.assertRegex(entry, r"^(CVE-\d{4}-\d+|GHSA(-[a-z0-9]{4}){3})$")
+
+    def test_the_justifications_are_written_down(self) -> None:
+        """A bare ID list is indistinguishable from a list nobody read."""
+        text = self.IGNOREFILE.read_text(encoding="utf-8")
+        comments = [ln for ln in text.splitlines() if ln.strip().startswith("#")]
+        self.assertGreater(len(comments), len(self._entries()))
+        for phrase in ("mlflow==2.22.5", "tracking server", "pyarrow<20"):
+            self.assertIn(phrase, text, "the reachability argument has been lost")
+
+    def test_suppressions_do_not_outlive_the_pin_that_forces_them(self) -> None:
+        """Every entry exists because MLflow cannot move while Azure ML serves
+        the MLflow 2 REST surface. If either pin is ever lifted, the file has to
+        be re-argued from scratch rather than carried forward."""
+        pyproject = _read("pyproject.toml")
+        self.assertIn('"mlflow==2.22.5"', pyproject)
+        self.assertNotRegex(pyproject, r'"mlflow==3\.')
+        self.assertIn('"azureml-mlflow==1.62.0.post5"', pyproject)
+
+    def test_no_floor_is_declared_for_a_capped_dependency(self) -> None:
+        """cryptography is suppressed rather than raised because azureml-mlflow
+        declares cryptography<49.0.0 and both fixes are 49 and 50. A floor here
+        makes the set unsolvable, so the image stops building instead of
+        starting to fail the scan."""
+        pyproject = _read("pyproject.toml")
+        self.assertNotIn('"cryptography>=', pyproject)
+
+
+class RuntimeImageTests(unittest.TestCase):
+    def test_the_base_image_build_toolchain_is_removed(self) -> None:
+        """The venv is built without --system-site-packages and is first on
+        PATH, so /usr/local's setuptools is unreachable code that still carries
+        CVEs through its vendored jaraco.context and wheel."""
+        dockerfile = _read("Dockerfile")
+        for target in ("site-packages/setuptools", "site-packages/pkg_resources"):
+            self.assertIn(target, dockerfile)
+        self.assertIn("rm -rf /usr/local/lib/python3.11/site-packages", dockerfile)
+
+    def test_transitive_security_floors_are_declared(self) -> None:
+        """msgpack arrives under the Azure SDKs, whose range was open enough for
+        the resolver to pick a version with a fixed HIGH."""
+        pyproject = _read("pyproject.toml")
+        azure = pyproject.split("azure = [")[1].split("]")[0]
+        self.assertIn('"msgpack>=', azure)
+
 
 class AzurePolicyTests(unittest.TestCase):
     def test_six_mandatory_tags_are_required_by_policy(self) -> None:
