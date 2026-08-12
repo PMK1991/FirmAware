@@ -298,6 +298,25 @@ resource "azurerm_role_assignment" "cicd_scores_appender" {
   principal_id       = data.azurerm_user_assigned_identity.cicd.principal_id
 }
 
+# `az ml batch-endpoint invoke --input <local file>` does not hand the path to
+# the service. The CLI uploads the file to the workspace's default datastore
+# first and passes a URI, so the *caller* needs data-plane write on the
+# workspace's own storage account -- which is what the smoke test's fixture is.
+# Without it the invoke fails at "You don't have permission to alter this
+# storage account" after the deployment has already been resolved, which reads
+# like an endpoint problem rather than a caller-credential one.
+#
+# This is the workspace's working storage: run history, snapshots, job staging.
+# It is a different account from the lake precisely so that evidence is not
+# mixed in with AML's scratch, and Contributor here therefore reaches nothing
+# the append-only rule protects. Account-scoped for the same reason as the
+# workspace's own grant above: AML creates and names those containers itself.
+resource "azurerm_role_assignment" "cicd_workspace_storage_contributor" {
+  scope                = var.workspace_storage_account_id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = data.azurerm_user_assigned_identity.cicd.principal_id
+}
+
 # Terraform must be able to create the resources it plans. This is the widest
 # grant in the file and the reason it is scoped to one resource group: a leaked
 # GitHub token reaches this environment and stops at its boundary.
