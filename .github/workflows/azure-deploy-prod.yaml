@@ -175,6 +175,19 @@ jobs:
     # lands in the OIDC subject claim, so it must match github_environment in
     # envs/prod.tfvars. The job blocks here until a reviewer approves.
     environment: production
+    # Terraform federates on its own. Azure/login authenticates the az CLI, but
+    # the azurerm provider refuses to reuse a CLI session belonging to a service
+    # principal -- "Authenticating using the Azure CLI is only supported as a
+    # User (not a Service Principal)" -- so ARM_USE_OIDC has it request its own
+    # token from the Actions endpoint, covering the provider and the azurerm
+    # state backend alike. On the job rather than the workflow because these are
+    # environment-scoped variables, and production's must not be read by
+    # verify-dev-provenance, which deliberately runs with dev's.
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
