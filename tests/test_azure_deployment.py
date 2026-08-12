@@ -68,6 +68,40 @@ class AzureIdentityTests(unittest.TestCase):
         self.assertEqual(len(invocations), smoke.count("--auth-mode login"))
         self.assertNotIn("--auth-mode key", smoke)
 
+    def test_cicd_can_stage_local_inputs_on_the_workspace_account(self) -> None:
+        """`az ml batch-endpoint invoke --input <local file>` and a job spec's
+        `code:` directory are both uploaded by the CLI to the workspace's default
+        datastore before the service ever sees them, so the caller needs
+        data-plane write on the workspace storage account. Control-plane
+        Contributor does not provide it."""
+        identity = _read("infra", "azure", "modules", "identity", "main.tf")
+        block = identity.split(
+            'resource "azurerm_role_assignment" "cicd_workspace_storage_contributor"'
+        )[1].split("resource ")[0]
+        self.assertIn("var.workspace_storage_account_id", block)
+        self.assertIn('"Storage Blob Data Contributor"', block)
+
+        # The grant lands on the workspace's scratch account, never the lake --
+        # that separation is what keeps it clear of the append-only containers.
+        storage_scoped = [
+            name
+            for name in re.findall(
+                r'resource "azurerm_role_assignment" "(cicd_\w+)"', identity
+            )
+            if "storage" in name or "scores" in name or "state" in name
+        ]
+        self.assertEqual(
+            sorted(storage_scoped),
+            [
+                "cicd_scores_appender",
+                "cicd_state_contributor",
+                "cicd_workspace_storage_contributor",
+            ],
+        )
+
+        run_batch = _read("deploy", "azure", "run_batch_scoring.sh")
+        self.assertIn("workspaceblobstore", run_batch)
+
     def test_runtime_identities_pull_images_but_cannot_push(self) -> None:
         identity = _read("infra", "azure", "modules", "identity", "main.tf")
         for name in ("workspace_acr_pull", "endpoint_acr_pull"):
