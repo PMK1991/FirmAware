@@ -274,6 +274,19 @@ class CheckovSuppressionTests(unittest.TestCase):
             "codeql-action/upload-sarif", workflow, "then the SARIF would be needed"
         )
 
+    def test_tfsec_is_pinned_and_authenticated(self) -> None:
+        """Left at its default the action resolves "latest" through an
+        unauthenticated GitHub API call on every run. That fails outright when
+        the runner's shared IP is rate limited -- a red security job caused by
+        nothing in the repository -- and it floats the scanner version, so the
+        same Terraform can pass one day and fail the next."""
+        workflow = _read(".github", "workflows", "azure-ci.yaml")
+        tfsec = workflow.split("name: tfsec")[1].split("- name:")[0]
+        self.assertIn("soft_fail: false", tfsec)
+        self.assertIn("github_token: ${{ secrets.GITHUB_TOKEN }}", tfsec)
+        self.assertRegex(tfsec, r"version: v\d+\.\d+\.\d+")
+        self.assertNotIn("version: latest", tfsec)
+
 
 class TrivySuppressionTests(unittest.TestCase):
     """Trivy blocks on HIGH and CRITICAL because dev runs a Basic registry,
