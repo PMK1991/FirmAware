@@ -275,6 +275,29 @@ resource "azurerm_role_assignment" "cicd_state_contributor" {
   principal_id         = data.azurerm_user_assigned_identity.cicd.principal_id
 }
 
+# The batch smoke test reads the score object the run just published and then
+# asserts a second write to it is refused. Contributor on the resource group is
+# control plane only -- it lets CI manage the storage account and grants no
+# access whatsoever to the data inside it -- so without this the smoke test
+# fails on "You do not have the required permissions", never having read a byte.
+#
+# The appender role, not Storage Blob Data Contributor, and not Reader.
+#
+# Reader would be enough to read the object back, and would make the
+# immutability assertion meaningless: the overwrite would be refused for lack of
+# permission rather than by the policy, so the test would report the container
+# is immutable without ever having tested it. The assertion is only worth
+# anything if the identity making it could otherwise have succeeded.
+#
+# Contributor would grant delete, on the one container whose entire purpose is
+# that nothing in the pipeline can remove evidence. CI is the identity most
+# exposed to a leaked token, so it is the last one that should hold it.
+resource "azurerm_role_assignment" "cicd_scores_appender" {
+  scope              = var.container_ids["scores"]
+  role_definition_id = azurerm_role_definition.scores_appender.role_definition_resource_id
+  principal_id       = data.azurerm_user_assigned_identity.cicd.principal_id
+}
+
 # Terraform must be able to create the resources it plans. This is the widest
 # grant in the file and the reason it is scoped to one resource group: a leaked
 # GitHub token reaches this environment and stops at its boundary.
