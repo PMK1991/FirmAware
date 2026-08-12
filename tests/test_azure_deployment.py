@@ -414,21 +414,23 @@ class RuntimeImageTests(unittest.TestCase):
             self.assertIn(target, dockerfile)
         self.assertIn("rm -rf /usr/local/lib/python3.11/site-packages", dockerfile)
 
-    def test_pip_is_not_shipped_in_the_venv(self) -> None:
-        """pip vendors its own msgpack and setuptools and ships bom.cdx.json
-        describing them, which trivy reads as installed packages -- they were
-        the last two findings, and neither is upgradable because neither is
-        separately installed. A runtime image has no use for pip: the AML
-        environments carry no conda_file and pyfunc load_model defaults to
-        env_manager="local"."""
+    def test_pip_stays_in_the_venv_for_the_batch_driver(self) -> None:
+        """pip was removed once, to clear the last two trivy findings: it
+        vendors msgpack and setuptools and ships bom.cdx.json describing them,
+        which trivy reads as installed packages. That broke batch scoring --
+        AML's driver runs `python -m pip` while initialising and exits 42
+        before the scoring script is called. The serving stage does not, so
+        every pre-deployment check passed. The findings are suppressed in
+        .trivyignore instead, where the argument is written down."""
         dockerfile = _read("Dockerfile")
-        self.assertIn("rm -rf /opt/venv/lib/python3.11/site-packages/pip", dockerfile)
-        removal = dockerfile.split("COPY --from=builder /opt/venv /opt/venv")[1]
-        self.assertLess(
-            removal.index("/opt/venv/bin/pip"),
-            removal.index("USER 10001:10001"),
-            "remove pip while still root, before the image drops privileges",
-        )
+        self.assertNotIn("rm -rf /opt/venv/lib/python3.11/site-packages/pip", dockerfile)
+        self.assertNotIn("/opt/venv/bin/pip", dockerfile)
+
+        # The suppressions only hold while pip is the reason they exist.
+        trivyignore = _read(".trivyignore")
+        self.assertIn("GHSA-6v7p-g79w-8964", trivyignore)
+        self.assertIn("CVE-2025-47273", trivyignore)
+        self.assertIn("amlbi_main.py", trivyignore)
 
     def test_transitive_security_floors_are_declared(self) -> None:
         """msgpack arrives under the Azure SDKs, whose range was open enough for
