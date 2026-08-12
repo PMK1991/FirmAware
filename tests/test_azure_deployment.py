@@ -36,11 +36,37 @@ class AzureIdentityTests(unittest.TestCase):
 
     def test_scores_uses_the_appender_role_not_blob_contributor(self) -> None:
         identity = _read("infra", "azure", "modules", "identity", "main.tf")
+        for name in ("workspace_scores_appender", "cicd_scores_appender"):
+            block = identity.split(f'resource "azurerm_role_assignment" "{name}"')[
+                1
+            ].split("resource ")[0]
+            self.assertIn("azurerm_role_definition.scores_appender", block)
+            self.assertNotIn("Storage Blob Data Contributor", block)
+
+    def test_cicd_can_write_scores_so_the_immutability_assertion_is_real(self) -> None:
+        """The batch smoke test asserts an overwrite of a published score object
+        is refused. Under a read-only grant that refusal would come from RBAC,
+        not from the immutability policy, and the test would pass without ever
+        exercising the guarantee it claims to prove. CI therefore holds the
+        appender role -- enough to have succeeded, so the refusal means something
+        -- and still cannot delete."""
+        identity = _read("infra", "azure", "modules", "identity", "main.tf")
         block = identity.split(
-            'resource "azurerm_role_assignment" "workspace_scores_appender"'
+            'resource "azurerm_role_assignment" "cicd_scores_appender"'
         )[1].split("resource ")[0]
-        self.assertIn("azurerm_role_definition.scores_appender", block)
-        self.assertNotIn("Storage Blob Data Contributor", block)
+        self.assertIn('var.container_ids["scores"]', block)
+        self.assertIn("data.azurerm_user_assigned_identity.cicd.principal_id", block)
+
+        smoke = _read("deploy", "azure", "batch_smoke_test.sh")
+        # Every data-plane call authenticates as the identity, never by key:
+        # shared_access_key_enabled is false, so a key path would fail outright.
+        invocations = [
+            line
+            for line in smoke.splitlines()
+            if "az storage " in line and not line.lstrip().startswith("#")
+        ]
+        self.assertEqual(len(invocations), smoke.count("--auth-mode login"))
+        self.assertNotIn("--auth-mode key", smoke)
 
     def test_runtime_identities_pull_images_but_cannot_push(self) -> None:
         identity = _read("infra", "azure", "modules", "identity", "main.tf")
