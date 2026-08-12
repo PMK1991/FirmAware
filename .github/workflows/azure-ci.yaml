@@ -108,6 +108,16 @@ jobs:
         with:
           working_directory: infra/azure
           soft_fail: false
+          # Pinned, and authenticated. Left at the default the action resolves
+          # "latest" through an unauthenticated GitHub API call on every run,
+          # which fails outright when the runner's shared IP is rate limited --
+          # a red security job caused by nothing in this repository. It also
+          # meant the scanner version floated, so the same Terraform could pass
+          # one day and fail the next, which is the same reason ruff is pinned
+          # exactly in pyproject.toml. v1.28.14 is tfsec's final release; the
+          # project is now folded into Trivy.
+          version: v1.28.14
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@83373cf2f8c4db6e24b41c1a9b086bb9619e9cd3 # v2.3.7
         env:

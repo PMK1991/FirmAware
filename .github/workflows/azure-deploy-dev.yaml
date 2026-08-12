@@ -52,6 +52,25 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: dev
+    # The ARM_* variables are what make Terraform federate. Azure/login
+    # authenticates the az CLI, but the azurerm provider refuses to reuse a CLI
+    # session belonging to a service principal -- it fails with "Authenticating
+    # using the Azure CLI is only supported as a User (not a Service Principal)"
+    # -- so it has to obtain its own token. With ARM_USE_OIDC set it requests one
+    # from the Actions token endpoint using the id-token permission this workflow
+    # already holds, which covers both the provider and the azurerm state backend
+    # (use_azuread_auth = true).
+    #
+    # Declared on the job, not the workflow: these read environment-scoped
+    # variables, and those only resolve once a job has named its `environment`.
+    # At job scope every step gets them, so init, plan, apply and each
+    # `terraform output` all authenticate the same way -- a step that missed them
+    # would fail on state access rather than on anything in the plan.
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
     outputs:
       image_digest: ${{ steps.build.outputs.image_digest }}
     steps:

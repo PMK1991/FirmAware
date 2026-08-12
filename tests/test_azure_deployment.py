@@ -63,7 +63,7 @@ class AzureIdentityTests(unittest.TestCase):
         self.assertNotIn('role_definition_name = "Owner"', identity)
         self.assertNotIn("scope                = var.subscription_id", identity)
 
-    def test_only_the_environment_subject_is_federated(self) -> None:
+    def test_only_environment_subjects_are_federated(self) -> None:
         """A branch credential alongside the environment one would let a job
         skip the required-reviewer gate.
 
@@ -71,13 +71,34 @@ class AzureIdentityTests(unittest.TestCase):
         declares one, so a branch-subject credential existing alongside it is
         not a fallback: it is a second door into the same identity that opens
         on any push, without an approval.
+
+        More than one subject is allowed, and expected: GitHub is migrating to
+        an immutable subject that embeds the numeric owner and repository IDs,
+        and which form a given token carries is not this repository's decision.
+        What must hold is that every registered subject is scoped to an
+        environment.
         """
         bootstrap = _read("infra", "azure", "bootstrap.sh")
         subjects = re.findall(r'add_federation\s+"[^"]+"\s*\\\s*\n\s*"([^"]+)"', bootstrap)
-        self.assertEqual(len(subjects), 1, "exactly one federated subject may exist")
-        self.assertIn(":environment:", subjects[0])
+        self.assertGreaterEqual(len(subjects), 1, "no federated subject is created")
+        for subject in subjects:
+            with self.subTest(subject=subject):
+                self.assertIn(":environment:", subject)
         self.assertNotIn("ref:refs/heads/", bootstrap)
 
+    def test_the_immutable_subject_is_registered_too(self) -> None:
+        """GitHub can present repo:owner@<id>/repo@<id>:environment:<env> while
+        the customization API still reports use_immutable_subject=false. When
+        the classic subject is the only one registered, Entra answers
+        AADSTS700213 naming the subject it was offered but not the one it holds,
+        which reads like a workflow bug rather than a missing credential."""
+        bootstrap = _read("infra", "azure", "bootstrap.sh")
+        subjects = re.findall(r'add_federation\s+"[^"]+"\s*\\\s*\n\s*"([^"]+)"', bootstrap)
+        self.assertTrue(
+            any("@${github_owner_id}" in subject for subject in subjects),
+            "register the immutable subject as well as the classic one",
+        )
+        self.assertIn("github_repo_id=", bootstrap)
 
     def test_workspace_identity_holds_both_halves_on_key_vault(self) -> None:
         """Key Vault Administrator is data-plane only -- its `actions` list is
@@ -252,6 +273,19 @@ class CheckovSuppressionTests(unittest.TestCase):
         self.assertNotIn(
             "codeql-action/upload-sarif", workflow, "then the SARIF would be needed"
         )
+
+    def test_tfsec_is_pinned_and_authenticated(self) -> None:
+        """Left at its default the action resolves "latest" through an
+        unauthenticated GitHub API call on every run. That fails outright when
+        the runner's shared IP is rate limited -- a red security job caused by
+        nothing in the repository -- and it floats the scanner version, so the
+        same Terraform can pass one day and fail the next."""
+        workflow = _read(".github", "workflows", "azure-ci.yaml")
+        tfsec = workflow.split("name: tfsec")[1].split("- name:")[0]
+        self.assertIn("soft_fail: false", tfsec)
+        self.assertIn("github_token: ${{ secrets.GITHUB_TOKEN }}", tfsec)
+        self.assertRegex(tfsec, r"version: v\d+\.\d+\.\d+")
+        self.assertNotIn("version: latest", tfsec)
 
 
 class TrivySuppressionTests(unittest.TestCase):
@@ -869,9 +903,58 @@ class DockerfileTargetTests(unittest.TestCase):
                 self.assertIn(expected, _read(*path.split("/")))
 
 
+class TerraformAuthTests(unittest.TestCase):
+    """Azure/login authenticates the az CLI, and that is not enough for
+    Terraform. The azurerm provider refuses to reuse a CLI session belonging to
+    a service principal -- "Authenticating using the Azure CLI is only supported
+    as a User (not a Service Principal)" -- so it has to federate itself."""
+
+    WORKFLOWS = (
+        (".github/workflows/azure-deploy-dev.yaml", "deploy"),
+        (".github/workflows/azure-deploy-prod.yaml", "deploy"),
+    )
+
+    def test_terraform_federates_in_every_deploy_job(self) -> None:
+        for path, _job in self.WORKFLOWS:
+            workflow = _read(*path.split("/"))
+            with self.subTest(workflow=path):
+                for name in (
+                    'ARM_USE_OIDC: "true"',
+                    "ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}",
+                    "ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}",
+                    "ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}",
+                ):
+                    self.assertIn(name, workflow)
+
+    def test_the_arm_variables_sit_inside_a_job_that_named_an_environment(self) -> None:
+        """Environment-scoped variables only resolve once a job declares its
+        `environment`. At workflow scope `vars.AZURE_CLIENT_ID` silently reads
+        the repository-level variable instead, which here is unset -- and an
+        unset var is an empty string, not an error."""
+        for path, _job in self.WORKFLOWS:
+            workflow = _read(*path.split("/"))
+            with self.subTest(workflow=path):
+                head, _, tail = workflow.partition('ARM_USE_OIDC: "true"')
+                self.assertIn("environment:", head)
+                self.assertIn("jobs:", head)
+                # The environment declaration must be the nearest one above it.
+                self.assertLess(
+                    head.rindex("jobs:"), head.rindex("environment:"), "wrong scope"
+                )
+                self.assertTrue(tail, "the variables are the end of the file")
+
+    def test_no_client_secret_is_used_anywhere(self) -> None:
+        """OIDC exists so there is nothing to rotate or leak. A secret would
+        also work, which is exactly why it has to be blocked in a test."""
+        for path, _job in self.WORKFLOWS:
+            workflow = _read(*path.split("/"))
+            with self.subTest(workflow=path):
+                self.assertNotIn("ARM_CLIENT_SECRET", workflow)
+                self.assertNotIn("creds:", workflow)
+
+
 class AzureResourceGroupTests(unittest.TestCase):
     """The resource group is Terraform's to decide, and only Terraform's.
-
     dev overrides the conventional rg-<prefix> name with a single shared group,
     but the deploy workflows carried the convention as a literal. The mismatch
     is silent: `az acr list -g <missing-group>` returns an empty list rather

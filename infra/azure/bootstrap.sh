@@ -160,6 +160,32 @@ add_federation() {
 add_federation "github-env-${github_environment}" \
   "repo:${github_owner}/${github_repo}:environment:${github_environment}"
 
+# GitHub is migrating the OIDC subject to an immutable form that embeds the
+# numeric owner and repository IDs -- repo:owner@<owner_id>/repo@<repo_id>:... --
+# so that a rename cannot silently redirect an existing trust. The rollout is
+# not driven by this repository's own settings: the customization API can still
+# report use_immutable_subject=false while the issued token already carries the
+# new prefix, which is exactly how this first surfaced. The classic subject then
+# stops matching and Entra answers AADSTS700213, naming the subject it was
+# offered but not the one it holds.
+#
+# Both subjects are registered rather than one, because either can be the one
+# presented and neither is under this repository's control. A federated
+# credential is a match on an exact string, so an unused one costs nothing; an
+# absent one costs a failed deployment that reads like a permissions problem.
+# The IDs come from the API rather than being hardcoded, and they are stable:
+# being immune to renames is the point of the format.
+github_owner_id="$(gh api "repos/${github_owner}/${github_repo}" --jq .owner.id 2>/dev/null || true)"
+github_repo_id="$(gh api "repos/${github_owner}/${github_repo}" --jq .id 2>/dev/null || true)"
+if [[ -n "${github_owner_id}" && -n "${github_repo_id}" ]]; then
+  add_federation "github-env-${github_environment}-immutable" \
+    "repo:${github_owner}@${github_owner_id}/${github_repo}@${github_repo_id}:environment:${github_environment}"
+else
+  echo "  WARNING: could not read the GitHub owner/repo IDs, so only the classic" >&2
+  echo "  subject is registered. If login fails with AADSTS700213, add the" >&2
+  echo "  immutable subject the error names as a second federated credential." >&2
+fi
+
 echo "[bootstrap] granting the bootstrap identity access to state only"
 # Deliberately narrow: this identity can read and write Terraform state, and read
 # its own identity resource. The broader Contributor grant it needs to apply is
