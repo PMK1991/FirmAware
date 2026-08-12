@@ -34,7 +34,10 @@ if digest="$(gcloud artifacts docker images describe \
   exit 0
 fi
 
-docker build --platform linux/amd64 --tag "${tagged_image}" .
+# --target runtime explicitly. Without it Docker builds the last stage in the
+# file, which is now `azureml` -- an image whose entrypoint is the AML inference
+# server, not the firmaware CLI that Cloud Run Jobs invoke.
+docker build --platform linux/amd64 --target runtime --tag "${tagged_image}" .
 docker push "${tagged_image}"
 
 digest="$(gcloud artifacts docker images describe \

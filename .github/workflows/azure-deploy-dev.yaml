@@ -41,8 +41,10 @@ concurrency:
   group: azure-deploy-dev
   cancel-in-progress: false
 
+# AZURE_RESOURCE_GROUP is deliberately absent: it is read from the tfvars by the
+# "Resolve resource group" step below, because Terraform is the only thing
+# entitled to decide it. A literal here drifted once already.
 env:
-  AZURE_RESOURCE_GROUP: rg-firmaware-dev
   AZURE_ML_WORKSPACE: mlw-firmaware-dev
   TF_VAR_FILE: envs/dev.tfvars
 
@@ -54,6 +56,14 @@ jobs:
       image_digest: ${{ steps.build.outputs.image_digest }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Before anything that talks to Azure, so no step can run against a group
+      # that does not exist.
+      - name: Resolve resource group
+        run: |
+          rg="$(bash deploy/azure/resource_group.sh dev)"
+          echo "AZURE_RESOURCE_GROUP=${rg}" >> "$GITHUB_ENV"
+          echo "resource group: ${rg}"
 
       - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:

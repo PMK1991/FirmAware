@@ -46,6 +46,10 @@ the contract it is built against is [`../../docs/design/azure-implementation-spe
 | `AZURE_CLIENT_ID` on cluster jobs | Any job that authenticates to storage from the cluster must set it. The cluster runs a **user-assigned** identity, but `DefaultAzureCredential`'s managed-identity probe asks IMDS for the *system-assigned* one unless `AZURE_CLIENT_ID` names another. The failure is `ClientAuthenticationError`, which reads exactly like a missing role assignment and is not one. `run_batch_scoring.sh` resolves it from the compute at submit time rather than hardcoding it, because the value differs per environment. |
 | ADLS writes use create/append/flush | `write_scores` calls `create_file(match_condition=IfMissing)` → `append_data` → `flush_data`, never `upload_data(overwrite=False)`. The latter does not mean what its name suggests on ADLS: it appends to a path it never creates, so a brand-new score object fails `PathNotFound`. It is also the only shape the `scores` container accepts, since protected append writes refuse whole-blob uploads. `IfMissing` sends `If-None-Match: *`, making the create the ADLS counterpart of GCS's `if_generation_match=0`. |
 | A dirty tree cannot be tagged with a commit SHA | `build.sh` refuses to build when the image inputs differ from `HEAD`. Its tag is a commit SHA but its build context is the working tree, and the SHA short-circuit that makes the script idempotent then returns whatever was pushed under that SHA earlier — so a rebuild after an uncommitted change silently yields a *stale* image. This cost real time: a rebuild returned a day-old image predating three fixes, and the symptom appeared two deploys later as a model that would not load, which looks nothing like a build problem. CI passes `GITHUB_SHA` explicitly and controls its own checkout, so the guard never fires there. Locally, either commit or set `FIRMAWARE_ALLOW_DIRTY=1`, which tags `dirty-<content-hash>` — honest about not being a commit, and still content-addressed so the digest changes if and only if the image would. |
+| The resource group is read, never restated | Both deploy workflows resolve it with `deploy/azure/resource_group.sh`, which parses `envs/<env>.tfvars`. The workflows previously carried `rg-firmaware-dev` as a literal while dev's tfvars said `firmAware`, and the mismatch is silent: `az acr list -g <missing-group>` returns an empty list rather than an error, so the run continued with an empty registry name and failed several steps later pointing at nothing. |
+| Every image build names its `--target` | `docker build` with no target builds the **last** stage in the Dockerfile, so appending the `azureml` serving stage retargeted every consumer that relied on the default — the shared CI job started building the inference server and failed that stage's own import guard, and the GCP build would have shipped it to Cloud Run Jobs, where the entrypoint is not the firmaware CLI. Neither build mentions `azureml`, so neither looked like a suspect. |
+| checkov suppressions live on the resource | Inline `#checkov:skip=<id>:<reason>` rather than a config-file skip list or `soft_fail: true`. A global list also suppresses resources added later that nobody assessed; an inline skip cannot spread. A test asserts every skip carries a reason of real length, because a bare skip converts a blocking control into no control and reads in a diff exactly like a fix. Of the 27 original failures, four were genuine and are fixed (no NSG on `snet-scoring`, no soft delete on the workspace storage account, `local_user_enabled`, `local_auth_enabled`); the rest are Premium-only ACR features, controls behind `var.network_isolation` that checkov cannot evaluate from module source, or deliberate choices on replication and CMK. |
+| Blob logging names its categories | The `audit` category group covers `StorageWrite` and `StorageDelete` but **not** `StorageRead`. On a lake holding both the inputs and the scored outputs, who read the data is the half of the audit trail that matters most, and it was the half that was missing. checkov's own check for this (`CKV2_AZURE_21`) is skipped rather than satisfied: it demands `azurerm_log_analytics_storage_insights`, whose `storage_account_key` argument the provider marks **required** — the one credential `shared_access_key_enabled = false` exists to eliminate. |
 
 ## Resource topology
 
@@ -386,10 +390,21 @@ The OIDC subject is scoped to the environment, so a workflow that does not
 declare it cannot obtain a token at all — which is what gives prod's
 required-reviewer gate teeth rather than making it a UI convention.
 
-Set the three repository variables it prints — `AZURE_CLIENT_ID`,
-`AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` — as GitHub **variables**, not
-secrets. None of them is confidential, and marking them secret only makes CI logs
-harder to read.
+Set them as GitHub **variables**, not secrets: none is confidential, and marking
+them secret only makes CI logs harder to read.
+
+```bash
+gh variable set AZURE_CLIENT_ID       --env dev --body "$(az identity show -n id-firmaware-bootstrap-dev -g rg-firmaware-tfstate --query clientId -o tsv)"
+gh variable set AZURE_TENANT_ID       --env dev --body "$(az account show --query tenantId -o tsv)"
+gh variable set AZURE_SUBSCRIPTION_ID --env dev --body "$(az account show --query id -o tsv)"
+```
+
+Skipping this step is not a quiet failure but it is a confusing one. `Azure/login`
+reports *"Not all values are present. Ensure 'client-id' and 'tenant-id' are
+supplied"*, which reads like a malformed workflow; the workflow is fine, the
+variables simply resolve to empty strings because an unset `vars.*` is empty
+rather than an error. Setting them at **repository** scope instead makes the same
+error appear only in whichever environment was bootstrapped second.
 
 ### If the first apply fails on a Key Vault permission
 

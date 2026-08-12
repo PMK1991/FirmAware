@@ -89,6 +89,29 @@ resource "azurerm_network_security_group" "private_endpoints" {
   }
 }
 
+# snet-scoring holds the managed online endpoint's outbound integration. It had
+# no NSG at all while its two sibling subnets had one each -- an omission rather
+# than a decision, and the kind that is invisible because the subnet still works
+# perfectly without it.
+resource "azurerm_network_security_group" "scoring" {
+  name                = "nsg-${var.name_prefix}-scoring"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  tags                = var.tags
+
+  security_rule {
+    name                       = "deny-internet-inbound"
+    priority                   = 4096
+    direction                  = "Inbound"
+    access                     = "Deny"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "Internet"
+    destination_address_prefix = "*"
+  }
+}
+
 resource "azurerm_subnet_network_security_group_association" "compute" {
   subnet_id                 = azurerm_subnet.compute.id
   network_security_group_id = azurerm_network_security_group.compute.id
@@ -97,6 +120,11 @@ resource "azurerm_subnet_network_security_group_association" "compute" {
 resource "azurerm_subnet_network_security_group_association" "private_endpoints" {
   subnet_id                 = azurerm_subnet.private_endpoints.id
   network_security_group_id = azurerm_network_security_group.private_endpoints.id
+}
+
+resource "azurerm_subnet_network_security_group_association" "scoring" {
+  subnet_id                 = azurerm_subnet.scoring.id
+  network_security_group_id = azurerm_network_security_group.scoring.id
 }
 
 # --- private endpoints and DNS ------------------------------------------------

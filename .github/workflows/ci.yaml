@@ -29,6 +29,14 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          # Explicit, and it must stay explicit. `docker build` with no target
+          # builds the LAST stage in the Dockerfile, so appending the `azureml`
+          # serving stage silently retargeted this job: it started building an
+          # image whose entrypoint is the AML inference server, failed the
+          # stage's `import azureml_inference_server_http` guard under the
+          # default PIP_EXTRAS, and would have failed the `--help` run below even
+          # if it had built.
+          target: runtime
           push: false
           load: true
           tags: firmaware:ci
