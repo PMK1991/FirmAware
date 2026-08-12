@@ -77,7 +77,31 @@ CVE-2026-4035
 # already has everything this would grant.
 CVE-2025-10279
 
-# --- pyarrow 19.0.1 -----------------------------------------------------------
+# --- pip's vendored copies, not installed packages ----------------------------
+# msgpack 1.1.2 and setuptools 70.3.0 are never installed here. The real
+# installed versions are msgpack 1.2.1 and setuptools 84.0.0, both already
+# past these fixes. Trivy reports the old ones because pip ships
+# pip/_vendor/bom.cdx.json, an SBOM of its own vendored tree, and trivy reads
+# it as if it described the environment. They are identifiable in trivy's JSON
+# because only these two carry a BOMRef and sit under the generic `Python`
+# target rather than a .dist-info/METADATA path.
+#
+# They are also the only entries here that `ignore-unfixed` does not cover:
+# trivy names a fix version for both, because it believes them to be real
+# installs. No version bump can move them -- they are not dependencies this
+# project resolves.
+#
+# The only way to clear them is to delete pip, which this image did for one
+# release -- and that broke batch scoring, because AML's batch driver
+# (driver/amlbi_main.py) runs `python -m pip` while initialising and exits 42
+# before calling the scoring script when it is missing. The serving stage does
+# not, which is why every pre-deployment check passed. See the Dockerfile.
+#
+# Nothing but pip imports pip/_vendor, and pip runs only when the AML driver
+# invokes it, at container start, on input no user supplies.
+GHSA-6v7p-g79w-8964
+CVE-2025-47273
+
 # Not a separate decision: mlflow 2.22.5 declares pyarrow<20, so the fix
 # version trivy wants (23.0.1) is unreachable while the pin above stands. The
 # flaw is a denial of service when parsing malformed Arrow IPC or Parquet
