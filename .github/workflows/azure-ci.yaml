@@ -41,7 +41,10 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install
-        run: python -m pip install --quiet -e ".[dev]"
+        # The same extras as the shared CI job, because this runs the same
+        # suite. `.[dev]` alone cannot even collect it: the acceptance tests
+        # import mlflow and joblib, which arrive with `train`.
+        run: python -m pip install --quiet -e ".[dev,app,train]"
       - name: Ruff
         run: ruff check src tests
       # The pipeline-spec acceptance tests, unmodified. The Azure work is only
@@ -92,6 +95,14 @@ jobs:
           framework: terraform
           quiet: true
           soft_fail: false
+          # cli only. The action otherwise also writes results.sarif into the
+          # workspace, and it runs in a container as root, so the Gitleaks step
+          # later in this same job cannot overwrite that file: gitleaks reports
+          # "no leaks found" and then dies on "open results.sarif: permission
+          # denied", which reads exactly like a leak was detected. Nothing here
+          # consumes the SARIF -- there is no upload-sarif step -- so the file
+          # was only ever debris.
+          output_format: cli
       - name: tfsec
         uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
         with:
