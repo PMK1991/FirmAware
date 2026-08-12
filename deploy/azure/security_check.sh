@@ -134,8 +134,18 @@ else
 fi
 
 for principal in ${principals}; do
-  bad="$(az role assignment list --assignee "${principal}" --all --query \
-    "[?scope=='${sub_scope}' || roleDefinitionName=='Owner'].{r:roleDefinitionName,s:scope}" -o tsv || true)"
+  # --assignee-object-id, not --assignee: the latter resolves the principal
+  # through Microsoft Graph first, and the CI identity holds no Graph permission
+  # at all -- by design, and asserted by control 1. Paired with `|| true`, that
+  # made this loop report a clean result for an identity whose assignments it
+  # had never managed to read. A control that passes when the query fails is
+  # worse than no control, and this is the loop that covers the one principal
+  # holding Contributor and User Access Administrator.
+  if ! bad="$(az role assignment list --assignee-object-id "${principal}" --all --query \
+    "[?scope=='${sub_scope}' || roleDefinitionName=='Owner'].{r:roleDefinitionName,s:scope}" -o tsv)"; then
+    echo "  ERROR: could not list role assignments for ${principal}" >&2
+    exit 2
+  fi
   [[ -z "${bad}" ]] || fail "over-privileged assignment for ${principal}: ${bad}"
 done
 pass "every identity, CI included, is scoped at or below a resource group"
@@ -183,8 +193,21 @@ sa_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"${s
 # resource: Azure exposes no diagnostic categories at the account level, so the
 # bare account id is deliberately not in this list.
 for resource in "${ws_id}" "${kv_id}" "${acr_id}" "${sa_id}/blobServices/default"; do
-  count="$(az monitor diagnostic-settings list --resource "${resource}" \
-    --query "length(value)" -o tsv 2>/dev/null || echo 0)"
+  # `|| echo 0` was here, and it made this control unable to tell "there is no
+  # diagnostic setting" from "the query did not run". That mattered more than it
+  # looks: the query never ran at all. `length(value)` assumed a wrapper object,
+  # but `diagnostic-settings list` returns a plain array, so JMESPath evaluated
+  # length(null) and failed every time. Four settings that all existed were
+  # reported missing, and the control had never once been true.
+  #
+  # Errors are surfaced now, not counted as findings -- and the reverse mistake,
+  # reporting a pass on a query that never answered, is the one this is really
+  # guarding against.
+  if ! count="$(az monitor diagnostic-settings list --resource "${resource}" \
+    --query "length(@)" -o tsv)"; then
+    echo "  ERROR: could not read diagnostic settings on ${resource}" >&2
+    exit 2
+  fi
   check "$([[ "${count}" -gt 0 ]] && echo true || echo false)" \
     "diagnostics on ${resource##*/}" \
     "no diagnostic setting on ${resource}"
