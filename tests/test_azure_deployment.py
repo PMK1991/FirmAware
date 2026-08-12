@@ -1067,12 +1067,64 @@ class AzureSecurityCheckTests(unittest.TestCase):
         check = (AZURE_DEPLOY / "security_check.sh").read_text(encoding="utf-8")
         self.assertIn("starts_with(roleName, 'Storage Blob Data Appender')", check)
 
-    def test_diagnostics_are_checked_where_categories_actually_exist(self) -> None:
+    def test_the_security_gate_gets_a_fresh_token(self) -> None:
+        """The client assertion Azure/login exchanges is valid for five minutes;
+        batch scoring takes closer to ten because the cluster scales from zero.
+        Without a second login every token the CLI has not already cached fails
+        AADSTS700024, and the gate reports on the age of a credential rather
+        than on the deployment."""
+        for name in ("azure-deploy-dev.yaml", "azure-deploy-prod.yaml"):
+            workflow = _read(".github", "workflows", name)
+            refresh = "name: Refresh Azure login before the security gate"
+            self.assertIn(refresh, workflow, f"{name} has no login refresh")
+            # Positional, not a count: prod's provenance job holds a login of its
+            # own, so counting logins passes while the gate still runs stale.
+            self.assertLess(
+                workflow.index(refresh),
+                workflow.index("security_check.sh"),
+                f"{name} refreshes the login after the gate has already run",
+            )
+            self.assertLess(
+                workflow.index("terraform apply"),
+                workflow.index(refresh),
+                f"{name} refreshes before the slow work, so it expires again",
+            )
+
+
         # Storage exposes diagnostic categories on the blob service, not on the
         # account, so including the bare account id guarantees a false failure.
         check = (AZURE_DEPLOY / "security_check.sh").read_text(encoding="utf-8")
         self.assertIn('"${sa_id}/blobServices/default"', check)
         self.assertNotIn('"${acr_id}" "${sa_id}"', check)
+
+    def test_diagnostics_are_counted_off_the_shape_the_cli_returns(self) -> None:
+        """`az monitor diagnostic-settings list` returns a plain array, not a
+        wrapper object, so `length(value)` evaluated length(null) and errored on
+        every call. Paired with `|| echo 0` that reported four settings which all
+        existed as missing, and the control had never once been true."""
+        check = (AZURE_DEPLOY / "security_check.sh").read_text(encoding="utf-8")
+        queries = [
+            line
+            for line in check.splitlines()
+            if "--query" in line and not line.lstrip().startswith("#")
+        ]
+        diagnostics = [line for line in queries if "length(" in line]
+        self.assertTrue(diagnostics, "the diagnostics count query is gone")
+        for line in diagnostics:
+            self.assertIn("length(@)", line)
+            self.assertNotIn("length(value)", line)
+
+    def test_no_control_can_pass_because_its_query_failed(self) -> None:
+        """The inverse of a false failure, and the worse half: a gate that
+        swallows an error and prints a pass asserts something it never checked.
+        Role assignments are read by object id so the query does not depend on
+        Graph, which the deploy identity deliberately cannot read at all."""
+        check = (AZURE_DEPLOY / "security_check.sh").read_text(encoding="utf-8")
+        self.assertIn("--assignee-object-id", check)
+        for line in check.splitlines():
+            if "az role assignment list" in line or "diagnostic-settings list" in line:
+                self.assertNotIn("|| true", line)
+                self.assertNotIn("|| echo 0", line)
 
     def test_credential_check_reports_unverified_rather_than_passing(self) -> None:
         # The deploy identity cannot read Microsoft Graph. Swallowing that error

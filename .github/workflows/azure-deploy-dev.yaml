@@ -260,6 +260,19 @@ jobs:
           FIRMAWARE_MODEL_VERSION: ${{ steps.model.outputs.version }}
         run: bash deploy/azure/batch_smoke_test.sh dev
 
+      # The client assertion Azure/login exchanges is valid for five minutes.
+      # Batch scoring takes closer to ten, because the cluster scales from zero,
+      # so by the time the checks below run the CLI is holding a stale assertion
+      # and every token it has not already cached fails AADSTS700024. Logging in
+      # again mints a fresh one. Cheap, and it keeps the security gate reporting
+      # on the deployment rather than on the age of a credential.
+      - name: Refresh Azure login before the security gate
+        uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       # Runs last and still fails the job: a deploy that succeeded but left a
       # control broken is a failed deploy.
       - name: Security check
