@@ -26,11 +26,18 @@ resource "azurerm_container_app_environment" "this" {
 
   # External. The page is deliberately reachable from the internet -- see "A
   # public page" in infra/azure/README.md, which records that decision and what
-  # it rests on. Stated explicitly rather than left to the provider default,
-  # because it is the most consequential line in this module.
-  internal_load_balancer_enabled = false
+  # it rests on.
+  #
+  # null, not false, when there is no subnet. The provider marks both this and
+  # zone_redundancy_enabled RequiredWith infrastructure_subnet_id, so stating
+  # either one on a Consumption-only environment fails the plan with "all of
+  # `infrastructure_subnet_id,internal_load_balancer_enabled` must be
+  # specified". A null attribute is an unset attribute, which is what the
+  # subnet-less case needs -- and false is the platform default there anyway,
+  # because an environment with no VNet has nowhere to put an internal balancer.
+  internal_load_balancer_enabled = var.infrastructure_subnet_id == null ? null : false
 
-  zone_redundancy_enabled = var.zone_redundant && var.infrastructure_subnet_id != null
+  zone_redundancy_enabled = var.infrastructure_subnet_id == null ? null : var.zone_redundant
 
   # Only when the environment is VNet-integrated. A Consumption-only environment
   # rejects workload profiles outright, and a workload-profiles environment is
