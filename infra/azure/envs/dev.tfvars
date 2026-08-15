@@ -80,3 +80,9 @@ online_min_instances = 0
 
 alerts_email   = "data4v@gmail.com"
 monthly_budget = 40
+
+# The hosted page scales to zero. It is a read-only view whose only regular
+# visitor is the deploy smoke test, so an idle dev page costs nothing and a
+# visitor pays a cold start of roughly half a minute. app_image is not set here:
+# it is a digest, so it comes from the build rather than from a file.
+app_min_replicas = 0

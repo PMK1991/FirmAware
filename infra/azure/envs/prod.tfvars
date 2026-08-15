@@ -39,3 +39,7 @@ online_min_instances = 1
 
 alerts_email   = "data4v@gmail.com"
 monthly_budget = 300
+
+# One warm replica, for the same reason online_min_instances is 1: nobody should
+# pay a cold start to read a deployment decision.
+app_min_replicas = 1

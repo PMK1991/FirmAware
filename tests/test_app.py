@@ -80,8 +80,20 @@ RAISED_ROW = {
 }
 
 
-def build_fixture(directory: Path, threshold: float = 0.4) -> dict[str, str]:
-    """Write the minimum score/artifact/input trio the page reads."""
+def build_fixture(
+    directory: Path,
+    threshold: float = 0.4,
+    run_threshold: float | str | list[float] | None = None,
+    run_version: str | None = None,
+    champion: bool = True,
+) -> dict[str, str]:
+    """Write the minimum score/artifact/input trio the page reads.
+
+    `run_threshold` and `run_version` model the Azure shape, where the publish
+    step records both on every scored row; `champion=False` models the Azure
+    artifacts container, which is deliberately left empty because the model
+    registry versions the run there.
+    """
     upcoming = make_training_frame(12).drop(columns=SCORING_ONLY_COLUMNS)
 
     # Pin one all-clear and one all-raised row so the flag panel is exercised at
@@ -118,14 +130,19 @@ def build_fixture(directory: Path, threshold: float = 0.4) -> dict[str, str]:
         }
     )
     scores_path = directory / "scores.csv"
+    if run_threshold is not None:
+        scores["threshold"] = run_threshold
+    if run_version is not None:
+        scores["model_version"] = run_version
     scores.to_csv(scores_path, index=False)
 
     artifacts = directory / "artifacts"
     artifacts.mkdir(parents=True, exist_ok=True)
-    (artifacts / "metadata.json").write_text(
-        json.dumps({"threshold": threshold, "model_name": "xgboost"}),
-        encoding="utf-8",
-    )
+    if champion:
+        (artifacts / "metadata.json").write_text(
+            json.dumps({"threshold": threshold, "model_name": "xgboost"}),
+            encoding="utf-8",
+        )
 
     return {
         "FIRMAWARE_SCORES_URI": str(scores_path),
@@ -243,6 +260,87 @@ class AppTests(unittest.TestCase):
             self.assertEqual(gauge["steps"][1]["range"], [20.0, 40.0])
             self.assertEqual(gauge["steps"][2]["range"], [40.0, 100])
             self.assertEqual(gauge["threshold"]["value"], 40.0)
+
+    def test_gauge_zones_follow_the_run_not_the_current_champion(self) -> None:
+        """The threshold that explains a row's band is the one it was scored
+        with. Selecting an earlier run is exactly when that differs from the
+        champion, and redrawing the zones around a decision the run never made
+        would put the needle in a colour that contradicts the band beside it."""
+        with tempfile.TemporaryDirectory() as directory:
+            page = self.start(
+                build_fixture(
+                    Path(directory),
+                    threshold=0.4,
+                    run_threshold=0.18,
+                    run_version="7",
+                )
+            )
+            page.radio[0].set_value("Fleet Overview").run()
+            self.assertEqual(page.exception, [])
+
+            gauge = json.loads(page.get("plotly_chart")[0].proto.spec)["data"][0][
+                "gauge"
+            ]
+            self.assertEqual(gauge["threshold"]["value"], 18.0)
+            self.assertEqual(gauge["steps"][1]["range"], [9.0, 18.0])
+
+            rendered = " ".join(str(block.value) for block in page.markdown)
+            self.assertIn("0.1800", rendered)
+            self.assertNotIn("0.4000", rendered)
+
+    def test_azure_needs_no_champion_pointer(self) -> None:
+        """Azure leaves the artifacts container empty on purpose -- the model
+        registry versions the run there -- so a page that insisted on a champion
+        pointer would warn on every load about a design decision."""
+        with tempfile.TemporaryDirectory() as directory:
+            page = self.start(
+                build_fixture(
+                    Path(directory),
+                    run_threshold=0.18,
+                    run_version="7",
+                    champion=False,
+                )
+            )
+            page.radio[0].set_value("Fleet Overview").run()
+
+            self.assertEqual(page.exception, [])
+            warnings = " ".join(str(block.value) for block in page.warning)
+            self.assertNotIn("Champion metadata unavailable", warnings)
+
+            rendered = " ".join(str(block.value) for block in page.markdown)
+            self.assertIn("0.1800", rendered)
+            self.assertIn("version 7", rendered)
+
+    def test_a_threshold_that_cannot_be_attributed_is_not_used(self) -> None:
+        """More than one value across the rows means runs have been mixed, so it
+        describes only some of what is on screen. The champion pointer is the
+        honest source then, not the first row's value."""
+        with tempfile.TemporaryDirectory() as directory:
+            page = self.start(
+                build_fixture(
+                    Path(directory),
+                    threshold=0.4,
+                    run_threshold=[0.18 if index % 2 else 0.25 for index in range(12)],
+                )
+            )
+            page.radio[0].set_value("Fleet Overview").run()
+
+            self.assertEqual(page.exception, [])
+            rendered = " ".join(str(block.value) for block in page.markdown)
+            self.assertIn("0.4000", rendered)
+            self.assertNotIn("0.1800", rendered)
+
+    def test_an_assumed_threshold_says_that_it_is_assumed(self) -> None:
+        """With neither source the gauge zones are a guess, and they are the only
+        thing telling a reader where the bands sit -- so the guess is labelled
+        rather than presented as measurement."""
+        with tempfile.TemporaryDirectory() as directory:
+            page = self.start(build_fixture(Path(directory), champion=False))
+            page.radio[0].set_value("Fleet Overview").run()
+
+            self.assertEqual(page.exception, [])
+            rendered = " ".join(str(block.value) for block in page.markdown)
+            self.assertIn("(assumed)", rendered)
 
     def test_operator_can_select_an_earlier_scoring_run(self) -> None:
         """A scores directory holds one immutable object per run, newest last."""

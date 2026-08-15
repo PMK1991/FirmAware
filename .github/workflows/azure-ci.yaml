@@ -12,6 +12,9 @@ on:
       - "deploy/azure/**"
       - "src/**"
       - "tests/**"
+      - "app.py"
+      - "demo/**"
+      - ".streamlit/**"
       - "pyproject.toml"
       - "Dockerfile"
       - ".github/workflows/azure-*.yaml"
@@ -22,6 +25,9 @@ on:
       - "deploy/azure/**"
       - "src/**"
       - "tests/**"
+      - "app.py"
+      - "demo/**"
+      - ".streamlit/**"
       - "pyproject.toml"
       - "Dockerfile"
       - ".github/workflows/azure-*.yaml"
@@ -177,6 +183,31 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: firmaware:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          trivyignores: .trivyignore
+
+      # The page is a genuinely different image, not a variant of the one above:
+      # `app,azure` instead of `train,azure`, so it carries Streamlit, Plotly and
+      # the ADLS client and carries neither scikit-learn, xgboost nor mlflow.
+      # Nothing else in this repository scans that surface, and it is the only
+      # image in the deployment that anonymous callers on the internet can reach.
+      - name: Build page image
+        run: |
+          docker build --platform linux/amd64 \
+            --build-arg PIP_EXTRAS=app,azure \
+            --target app \
+            -t firmaware-app:ci .
+
+      # Same gate, same severities, same ignore file. A finding suppressed for
+      # the ML image is suppressed with a reachability argument that has to hold
+      # for this one too, which is why there is one .trivyignore and not two.
+      - name: Trivy (page)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: firmaware-app:ci
           format: table
           exit-code: "1"
           ignore-unfixed: true

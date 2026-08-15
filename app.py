@@ -28,7 +28,9 @@ import streamlit as st
 
 from firmaware.features import derive_features
 from firmaware.io import (
+    is_abfss_uri,
     is_gcs_uri,
+    is_remote_uri,
     join_uri,
     list_scores_uris,
     materialize_artifacts,
@@ -50,7 +52,7 @@ def resolve_uri(env_var: str, default: str, demo: str, probe: str | None = None)
     configured = os.getenv(env_var)
     if configured:
         return configured
-    if is_gcs_uri(default) or Path(probe or default).exists():
+    if is_remote_uri(default) or Path(probe or default).exists():
         return default
     fallback = DEMO_DIR / demo
     return str(fallback) if fallback.exists() else default
@@ -496,15 +498,63 @@ except Exception as error:  # noqa: BLE001
 df = scores.merge(features, on="deployment_id", how="left", suffixes=("", "_input"))
 
 metadata = {}
-try:
-    metadata = load_champion(ARTIFACTS_URI)
-except Exception as error:  # noqa: BLE001
-    st.sidebar.warning(f"Champion metadata unavailable: {error}")
 
-threshold = float(metadata.get("threshold", 0.5))
-model_name = metadata.get("model_name", "unknown")
+
+def run_fact(frame: pd.DataFrame, column: str) -> str | None:
+    """A per-run constant recorded in the scores, or None if it is not one.
+
+    Publishing writes these once per run, so more than one distinct value means
+    rows from different runs have been mixed and the value cannot be attributed
+    to what is on screen. Returning None then sends the caller to the champion
+    pointer rather than showing a number that belongs to only some of the rows.
+    """
+    if column not in frame.columns:
+        return None
+    values = {str(value) for value in frame[column].dropna().unique()}
+    return values.pop() if len(values) == 1 else None
+
+
+# Prefer what the scoring run recorded over what the champion is now. Picking an
+# older run in the sidebar is exactly when the two differ, and the threshold that
+# explains a row's band is the one it was scored with -- the current champion's
+# would redraw the gauge zones around a decision this run never made.
+run_threshold = run_fact(df, "threshold")
+run_version = run_fact(df, "model_version")
+
+if run_threshold is None or run_version is None:
+    # Only reached when the scores carry no run facts. `predict.py` writes
+    # SCORE_COLUMNS plus scored_at, so local and GCS runs land here and the
+    # champion pointer is the only source. Azure's publish step adds both
+    # columns, so it skips this -- which also stops the page warning about an
+    # artifacts container that Azure's design deliberately leaves empty, since
+    # there the model registry versions the run instead.
+    try:
+        metadata = load_champion(ARTIFACTS_URI)
+    except Exception as error:  # noqa: BLE001
+        st.sidebar.warning(f"Champion metadata unavailable: {error}")
+
+threshold_source = run_threshold if run_threshold is not None else metadata.get(
+    "threshold"
+)
+try:
+    threshold = 0.5 if threshold_source is None else float(threshold_source)
+except (TypeError, ValueError):
+    st.sidebar.warning(
+        f"Unreadable threshold {threshold_source!r}; gauge zones assume 0.5."
+    )
+    threshold_source = None
+    threshold = 0.5
+
+model_name = metadata.get("model_name") or (
+    f"version {run_version}" if run_version else "unknown"
+)
 model_run = str(df["model_run"].iloc[0]) if "model_run" in df.columns else "N/A"
 scored_at = str(df["scored_at"].iloc[0])[:19] if "scored_at" in df.columns else "N/A"
+# Never present an assumed threshold as a measured one: it sets the gauge bands,
+# so a reader has no other way to tell that the zones are a guess.
+threshold_label = (
+    f"{threshold:.4f}" if threshold_source is not None else f"{threshold:.4f} (assumed)"
+)
 
 st.markdown(
     f"""
@@ -515,7 +565,7 @@ st.markdown(
         MODEL <b>{model_name}</b><br>
         RUN <b>{model_run[:19]}</b><br>
         SCORED <b>{scored_at}</b><br>
-        THRESHOLD <b>{threshold:.4f}</b>
+        THRESHOLD <b>{threshold_label}</b>
     </div>
 </div>
 """,
@@ -528,8 +578,14 @@ st.sidebar.caption(
     "Read-only view. Scores are produced by the batch pipeline; this page never "
     "trains or re-scores."
 )
-if is_gcs_uri(selected_run):
-    st.sidebar.caption("Reading published cloud scores.")
+# Name the backing store rather than just "cloud": when a page is showing a
+# GO/NO_GO decision, which store it came from is part of reading it correctly.
+if is_abfss_uri(selected_run):
+    st.sidebar.caption("Reading published scores from Azure Data Lake Storage.")
+elif is_gcs_uri(selected_run):
+    st.sidebar.caption("Reading published scores from Google Cloud Storage.")
+elif str(DEMO_DIR) in str(selected_run):
+    st.sidebar.caption("Sample run bundled with the checkout, not a live score.")
 
 view = st.radio(
     "View",

@@ -185,6 +185,43 @@ module "monitoring" {
   log_analytics_workspace_id = module.foundation.log_analytics_workspace_id
 }
 
+# The page. Last, because it consumes the storage URIs, the registry and the
+# identity that the modules above create, and because nothing else depends on it
+# -- the pipeline runs whether or not anyone is looking at it.
+module "app" {
+  source = "./modules/app"
+
+  name_prefix                     = local.name_prefix
+  location                        = var.location
+  resource_group_name             = module.foundation.resource_group_name
+  tags                            = local.tags
+  log_analytics_workspace_id      = module.foundation.log_analytics_workspace_id
+  container_registry_login_server = module.foundation.container_registry_login_server
+
+  app_identity_id        = module.identity.app_identity_id
+  app_identity_client_id = module.identity.app_identity_client_id
+  image                  = var.app_image
+
+  # From the storage module rather than assembled here, so the page cannot be
+  # pointed at a path this deployment never created.
+  scores_uri    = module.storage.scores_uri
+  artifacts_uri = module.storage.artifacts_uri
+  data_uri      = module.storage.data_uri
+
+  # Null in dev, which has no VNet at all. Same conditional as the workspace's
+  # compute subnet, and the same relaxation behind it.
+  infrastructure_subnet_id = var.network_isolation ? module.network[0].apps_subnet_id : null
+
+  min_replicas   = var.app_min_replicas
+  max_replicas   = var.app_max_replicas
+  zone_redundant = var.env == "prod" && var.network_isolation
+
+  # The identity's read grants must exist before a replica starts, or the first
+  # page load fails on authorization and the revision looks broken. Same
+  # propagation problem the workspace has, and the same sleep answers it.
+  depends_on = [time_sleep.role_propagation]
+}
+
 module "policy" {
   source = "./modules/policy"
 

@@ -609,6 +609,54 @@ a sidebar selector exposes the earlier immutable objects. Flags the model
 consumes are labeled separately from operator context that only annotates a
 deployment.
 
+### Reading Azure results from the page
+
+The page resolves its sources through the same environment contract as the
+pipeline, so pointing it at Azure is configuration, not code:
+
+```powershell
+$env:FIRMAWARE_SCORES_URI    = "abfss://scores@<account>.dfs.core.windows.net"
+$env:FIRMAWARE_ARTIFACTS_URI = "abfss://artifacts@<account>.dfs.core.windows.net"
+$env:FIRMAWARE_UPCOMING_URI  = "abfss://data@<account>.dfs.core.windows.net/deployment_events.csv"
+streamlit run app.py
+```
+
+The scores URI is the **container itself**, with no prefix under it. The batch
+pipeline publishes `scores_<timestamp>_<jobid>.csv` at the container root, and a
+prefix that matches nothing does not raise — the page quietly falls back to the
+bundled sample and renders numbers that came from the repository rather than
+from the pipeline.
+
+`io.py` resolves `abfss://` lazily through `DefaultAzureCredential`, listing
+score objects oldest-first exactly as it does for `gs://` and local paths, so
+run selection, artifact loading, and the OOD warnings behave identically. The
+sidebar names the backing store, so it is always visible whether a decision on
+screen came from Azure, GCS, a local run, or the bundled sample. Install both
+extras for this path:
+
+```powershell
+python -m pip install -e ".[app,azure]"
+```
+
+**Credentials are the one thing that does not travel.** The deployment forbids
+user-managed keys, and `DefaultAzureCredential` needs an identity to find:
+
+| Where the page runs | How it authenticates | Verdict |
+|---|---|---|
+| Azure Container Apps or App Service | User-assigned managed identity with `Storage Blob Data Reader` scoped to the `scores` container only | **Recommended, and what is deployed** — keyless, least privilege, and the page can read nothing but published scores |
+| A developer machine | `az login`, then the same credential chain | Fine for development |
+| Streamlit Community Cloud | No managed identity exists; reading Azure would require a client secret in Streamlit secrets | **Rejected** — it breaks the zero-keys posture for a public demo. Community Cloud keeps serving the committed sample run |
+
+That last row is why the hosted demo and the Azure-connected page are two
+deployments of the same file rather than one: the demo proves the interface, the
+Azure-hosted page reads the real thing from inside the tenant.
+
+The Azure-hosted page is built from the `app` stage of the same Dockerfile,
+released digest-pinned into a new Container Apps revision at 0% traffic, smoke
+tested on its own hostname, and only then promoted — the same release shape as
+the model image. `infra/azure/README.md` records the decisions, including the
+deliberate one to leave the page publicly reachable.
+
 ### Hosted demo on Streamlit Community Cloud
 
 [firmaware.streamlit.app](https://firmaware.streamlit.app/) serves this page from

@@ -18,6 +18,20 @@ output "endpoint_identity_client_id" {
   value = azurerm_user_assigned_identity.endpoint.client_id
 }
 
+output "app_identity_id" {
+  value = azurerm_user_assigned_identity.app.id
+}
+
+output "app_identity_client_id" {
+  description = "Set as AZURE_CLIENT_ID on the container. DefaultAzureCredential cannot pick a user-assigned identity without it."
+  value       = azurerm_user_assigned_identity.app.client_id
+}
+
+output "app_identity_principal_id" {
+  description = "Read by smoke_test_app.sh, which asserts this principal holds exactly four read-only assignments."
+  value       = azurerm_user_assigned_identity.app.principal_id
+}
+
 output "cicd_identity_id" {
   value = data.azurerm_user_assigned_identity.cicd.id
 }

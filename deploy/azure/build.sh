@@ -30,9 +30,29 @@ registry="${AZURE_ACR_NAME:?AZURE_ACR_NAME is required}"
 repository="${FIRMAWARE_IMAGE_REPOSITORY:-firmaware}"
 git_sha="${FIRMAWARE_GIT_SHA:-${GITHUB_SHA:-$(git rev-parse HEAD)}}"
 
+# Which Dockerfile stage, and with which extras. Defaulted to the ML image so
+# every existing caller is unchanged; the page passes `app`/`app,azure`.
+#
+# The two are separate variables rather than one "flavour" because the Dockerfile
+# already treats them separately, and pairing them wrongly is a build-time error
+# with a clear message (each stage guards its own imports) rather than a silent
+# one.
+target="${FIRMAWARE_IMAGE_TARGET:-azureml}"
+extras="${PIP_EXTRAS:-train,azure}"
+
 if [[ ! "${env_name}" =~ ^(dev|prod)$ ]]; then
   echo "Environment must be dev or prod" >&2
   exit 2
+fi
+
+# What the chosen stage actually copies. The `app` stage adds the page, its demo
+# fixtures and the Streamlit config on top of the common set, and those have to
+# be in both lists below or the guarantees break in opposite directions: missing
+# from the dirty check, an edited app.py is served as a clean commit's image;
+# missing from the content hash, two different pages share one tag.
+build_inputs=(Dockerfile pyproject.toml README.md config.yaml src)
+if [[ "${target}" == "app" ]]; then
+  build_inputs+=(app.py demo .streamlit)
 fi
 
 # Hashes exactly what the Dockerfile copies, so the tag changes if and only if
@@ -42,8 +62,8 @@ content_tag() {
   local listing
   listing="$(
     {
-      printf '%s\n' "${PIP_EXTRAS:-train,azure}"
-      find Dockerfile pyproject.toml README.md config.yaml src -type f -print0 \
+      printf '%s\n' "${extras}" "${target}"
+      find "${build_inputs[@]}" -type f -print0 \
         | sort -z | xargs -0 sha256sum
     } | sha256sum | cut -c1-16
   )"
@@ -55,7 +75,7 @@ if [[ -n "${FIRMAWARE_GIT_SHA:-${GITHUB_SHA:-}}" ]]; then
   # working tree is not this script's to judge.
   dirty=""
 else
-  dirty="$(git status --porcelain --untracked-files=no -- Dockerfile pyproject.toml README.md config.yaml src)"
+  dirty="$(git status --porcelain --untracked-files=no -- "${build_inputs[@]}")"
 fi
 
 if [[ -n "${dirty}" ]]; then
@@ -107,8 +127,8 @@ az acr build \
   --image "${repository}:${git_sha}" \
   --platform linux/amd64 \
   --file Dockerfile \
-  --build-arg PIP_EXTRAS=train,azure \
-  --target azureml \
+  --build-arg PIP_EXTRAS="${extras}" \
+  --target "${target}" \
   .
 
 digest="$(az acr repository show \

@@ -101,3 +101,72 @@ ENTRYPOINT []
 # liveness `/` and scoring `/score` are azmlinfsrv's documented defaults and
 # must match inference_config in deploy/azure/azureml/environment.yaml.
 CMD ["sh", "-c", "azmlinfsrv --entry_script \"${AZUREML_ENTRY_SCRIPT:-/var/azureml-app/score.py}\" --port 5001"]
+
+# Page stage, built for Azure Container Apps.
+#
+# Same base as everything else, so the page reads scores through exactly the
+# `firmaware.io` code the pipeline writes them with -- a divergence there would
+# show as a rendering bug rather than as a version mismatch.
+#
+# Built with `--build-arg PIP_EXTRAS=app,azure --target app`. Note `app,azure`
+# and NOT `train,azure`: the page never trains, never scores, and never loads a
+# model, so scikit-learn, xgboost and mlflow have no business being in an image
+# that is reachable from the internet. That is the whole reason `train` is an
+# extra rather than a base dependency.
+#
+# Stage order here is FORCED, not chosen. ACR Tasks build with the classic
+# builder, which builds every stage that precedes --target regardless of whether
+# the target depends on it. With `app` placed before `azureml`, a
+# `--target azureml --build-arg PIP_EXTRAS=train,azure` build ran this stage's
+# streamlit guard and died -- observed, not theorised.
+#
+# Last works in both directions: `--target azureml` stops before this stage, and
+# `--target app` builds `azureml` first, whose guard needs
+# azureml-inference-server-http, which lives in the `azure` extra that this
+# target also installs. The cost is that an untargeted `docker build` now yields
+# the page rather than the serving image, which is why
+# DockerfileTargetTests::test_every_build_names_its_target matters more than the
+# stage-order tripwire beside it: every build in this repository names a target.
+FROM runtime AS app
+USER root
+
+# The same build-time guard the azureml stage uses, for the same reason: a
+# missing extra should fail here, in seconds, rather than as a container that
+# rolls out and then fails its readiness probe.
+#
+# Both halves matter. streamlit is the server; azure.identity is how the page
+# authenticates to ADLS, and without it `firmaware.io` raises ContractViolation
+# on the first abfss:// read -- which looks like a permissions problem.
+RUN python -c "import streamlit, azure.identity" \
+    || (echo "build this target with --build-arg PIP_EXTRAS=app,azure" >&2; exit 1)
+
+# app.py resolves DEMO_DIR relative to its own file, so demo/ has to sit beside
+# it. .streamlit/config.toml carries the theme, and Streamlit only reads it from
+# the working directory -- which is why WORKDIR /app is inherited, not restated.
+COPY --chown=firmaware:firmaware app.py ./app.py
+COPY --chown=firmaware:firmaware demo ./demo
+COPY --chown=firmaware:firmaware .streamlit ./.streamlit
+
+USER 10001:10001
+
+EXPOSE 8501
+
+# Reset the CLI entrypoint inherited from `runtime`, exactly as the azureml
+# stage does, so the CMD below is the whole command.
+ENTRYPOINT []
+
+# Only the flags that running as a container behind a proxy requires. The theme
+# and gatherUsageStats already live in .streamlit/config.toml and are
+# deliberately not repeated here: two places to change one setting is how the
+# hosted page and the Community Cloud page drift apart.
+#
+# enableXsrfProtection is Streamlit's default and is stated anyway, because this
+# is the deployment where it is load-bearing -- the page is served from a public
+# hostname with no login in front of it, so turning it off (a common reflex when
+# websockets misbehave behind a proxy) would leave the websocket handshake open
+# to any origin.
+CMD ["streamlit", "run", "app.py", \
+     "--server.port=8501", \
+     "--server.address=0.0.0.0", \
+     "--server.headless=true", \
+     "--server.enableXsrfProtection=true"]

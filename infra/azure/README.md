@@ -62,6 +62,17 @@ the contract it is built against is [`../../docs/design/azure-implementation-spe
 | CI needs data-plane write on the **workspace** account too | `az ml batch-endpoint invoke --input <local file>` does not hand the path to the service. The CLI uploads the file to the workspace's default datastore (`workspaceblobstore`) and passes a URI, and a job spec's `code:` directory is uploaded the same way — so the **caller** needs data-plane write on the workspace storage account. Without it the invoke fails at `You don't have permission to alter this storage account` *after* the deployment has been resolved and its settings printed, which reads like an endpoint fault rather than a caller-credential one. This is AML's working storage — run history, snapshots, job staging — and it is a different account from the lake precisely so evidence is not mixed in with scratch, so `Storage Blob Data Contributor` here reaches nothing the append-only rule protects. Account-scoped for the same reason as the workspace's own grant: AML creates and names those containers itself. |
 | pip stays in the runtime venv | It was removed once, and it was the right-looking call: pip is a build-time tool, and it is the last source of trivy findings — it vendors `msgpack` and `setuptools` under `pip/_vendor` and ships `bom.cdx.json` describing them, which trivy reads as installed packages even though the real installs are already patched (1.2.1, 84.0.0). Removal cleared the scan, the CLI ran, and the serving stage answered `/score` under AML's real contract, because `azmlinfsrv` never shells out to pip. **The batch driver does.** `driver/amlbi_main.py` runs `python -m pip` while initialising, and without it the job dies at `No module named pip` with exit 42 *before the scoring script is called* — a batch failure with an almost empty user log and no mention of the deployment. Nothing available before a live batch run could have caught it: the container tests, the image scan and the serving rehearsal all passed. The two findings are suppressed in `.trivyignore` instead, which is also the only place `ignore-unfixed` cannot help, because trivy believes both to be real installs with real fixes. |
 | The security gate logs in again first, and reports only what it observed | Two defects surfaced together the first time the gate ever ran. The client assertion `Azure/login` exchanges is valid for **five minutes**; batch scoring takes closer to ten because the cluster scales from zero, so every token the CLI had not already cached failed `AADSTS700024`. Underneath that, control 6 had never worked at all: `az monitor diagnostic-settings list` returns a plain array, not a wrapper object, so `--query "length(value)"` evaluated `length(null)` and errored on every call. `\|\| echo 0` turned that into "no diagnostic setting" and reported four settings that all existed as missing. The fix is a second login before the gate, plus queries that surface an error instead of substituting a value. The same `\|\| true` pattern in control 4 was the **more dangerous** direction — an identity whose role assignments could not be read was reported clean — so that now reads by `--assignee-object-id`, which needs no Microsoft Graph permission, the one thing the deploy identity deliberately does not have. A gate that cannot tell "I checked and it is missing" from "I could not check" is not a gate. |
+| The hosted page is **public**, deliberately | The hosting spec asks for Entra ID sign-in with `RedirectToLoginPage`. The owner overrode it: *"Anyone with the link, no login at all — fully public."* This is a decision, not an omission, so it is written down and it is **tested** — `smoke_test_app.sh` control [2] fails the deploy if `GET /` ever answers 302, 401 or 403, which forces a future change of access model to update this row and that check together instead of one silently drifting from the other. The compensating control is what the page's identity can do rather than who can reach it: three `Storage Blob Data Reader` grants and `AcrPull`, and nothing else. It cannot append to `scores`, cannot read the vault, and holds no Contributor anywhere — so the worst an anonymous visitor can reach is the published scores, which are the artefact the page exists to show. Control [7] asserts that set is *exactly* four assignments, so a later grant cannot quietly widen it. |
+| The page is a container, not an App Service | It is the same repository, the same `Dockerfile` and the same digest-pinned release path as the model image — a fifth stage (`app`) rather than a second deployment mechanism. That keeps one build to scan, one promotion rule, and one thing to reason about when asking what is running. Container Apps also scales to zero, which matters because the page is idle most of the time. |
+| The page reads the scores container **root** | The spec's `${scores_uri}/scores` is wrong against this environment: the batch pipeline publishes `scores_<timestamp>_<jobid>.csv` at the container root, so a prefix underneath it lists nothing. That failure is silent and it is the dangerous kind — `app.py` falls back to the committed demo fixture, so the page renders plausible numbers that came out of the repository rather than out of the pipeline. Verified against live storage before wiring, and asserted in the acceptance tests. |
+| Terraform owns the container app, a deploy owns the revision | The same infrastructure-versus-release split as the batch endpoints. `lifecycle.ignore_changes` covers the container image and the ingress traffic map, because without it the next `terraform apply` would revert a promotion, or roll the image back to whatever digest the previous apply happened to see. |
+| `TF_VAR_app_image` is now required to plan | `app_image` has no safe default: the module rejects anything that is not `@sha256:…`, because a tag can move between the plan and the apply. The value only matters on create — changes are ignored — but a plan still has to name one. A local `terraform plan -detailed-exitcode` drift check therefore needs `TF_VAR_app_image=$(az containerapp show -n ca-firmaware-<env> -g <rg> --query "properties.template.containers[0].image" -o tsv)` in front of it, otherwise it fails the precondition rather than reporting drift. |
+| Terraform's `latestRevision: true` had to be pinned before every deploy | On the very first release there is no revision to name, so Terraform creates the app with a traffic map of `latestRevision: true`. Left that way, `az containerapp update` hands the new revision **100% of traffic the instant it exists** — before anything has tested it, which is precisely the design this pipeline exists to avoid. `deploy_app.sh` therefore resolves the live revision *by name* and pins traffic to it before creating the new one, then re-reads the traffic map and fails if any of it moved. |
+| The page subnet is a `/23`, not the `/27` minimum | Prod only; dev runs `network_isolation = false` and has no VNet at all, so the app takes a Consumption-only environment on platform-managed networking. Where there is a VNet, Container Apps holds addresses for superseded revisions during a rollout, and the environment's subnet **cannot be resized afterwards** — changing it means recreating the environment, which changes the public FQDN. `/23` is chosen once, at 10.42.8.0/23, past the three existing `/24`s. The delegation to `Microsoft.App/environments` and the workload-profile block switch together, because workload profiles require a delegated subnet and Consumption-only rejects one. |
+| Adding the page pushed the batch check past the assertion window | The five-minute `AADSTS700024` problem the security gate already solves, reached from a new direction. The token minted at login covers ARM, so registering assets, resolving the model and pointing the endpoint all kept working from cache; the batch smoke test is the first step to ask for a **storage** audience, and acquiring a new audience needs the assertion rather than the cache. The page steps sit at the top of the job — deliberately, so a page regression reports in about three minutes instead of twenty — and the ten minutes they add is what moved that request outside the window. Worth stating plainly because it is a property of *ordering*, not of either feature: inserting any slow step ahead of a first-use-of-an-audience step can reproduce it, and the failure names a credential rather than the thing that moved. Fixed with a refresh immediately before the consumer, which is where the existing one sits too. |
+| An unreadable control fails; an absent one does not | `length(properties.configuration.secrets)` errored on exactly the apps that should pass it, because an app with no secrets reports `"secrets": null` and JMESPath `length(null)` raises. The tempting fix is `\|\| echo 0`, which is the same laundering of an error into a passing value that control 6 of the security gate was built to remove. The distinction the gate actually needs is between *absent* and *unreadable*: the object is read as JSON, a non-zero exit or empty output still fails the deploy, and only a null or missing key counts as the genuine zero it is. The check was strengthened while open, to assert the positive form as well — the registry must pull with an identity and reference no password secret, since an empty secret list sitting beside a password reference would otherwise pass. |
+| The page's context comes from the scoring **input**, and nothing in CI writes it | A score row carries `deployment_id`, a probability, a band and a model run — nothing that says what the device *is*. Every panel describing equipment (Equipment Record, Cross-Vendor & Vulnerability Context, Risk Flag Panel, and the vendor and deployment-type breakdowns) is produced by joining scored rows back onto `data/upcoming_deployments.csv`. Three consequences, and all three bit. The file is seeded by a human at bootstrap, because CI holds no data-plane write on `data` and deliberately should not — so a fresh environment has scores and no context until someone lands it. The run that produces the scores has to have scored *that* file, and the Operating section used to point at the five-row smoke fixture instead, so following the documentation reproduced the fault. And because the batch smoke test publishes into the same append-only container as a real run while the page opens on the newest one, dev's newest run is usually those five synthetic rows — so seeding only the real input leaves the page looking broken again after every deploy, which is worse than not fixing it, because it looks fixed. The fixture is therefore seeded alongside the real input; the schemas are identical and `UPC_*` never collides with `smoke-*`. The failure is quiet by construction — `app.py` degrades to a sidebar warning rather than stopping, which is right for an operator page and unhelpful for whoever wired it. |
+| The page reads the threshold from the run, not from the champion | `load_champion` reads the `artifacts` container, and on Azure **nothing writes it**: `publish_artifact_run` refuses ADLS outright, because the model registry versions the run there and a champion pointer would be a second source of truth. So the lookup failed on every load and the 0.5 default stood in against a real threshold of 0.18 — and that number is not decoration, it sets the gauge zones, so the needle could sit in green on a row labelled HIGH beside it. The value was already in hand: the publish step records `threshold` and `model_version` on every scored row, so the page had loaded the answer and was reaching past it to a source that could not reply. Reading the run's own figure is also *more* correct than the champion would have been — selecting an earlier run is exactly when the two differ, and the threshold that explains a band is the one that row was scored with. The pointer remains the source where scores carry no run facts, which is every local and GCS run, since `predict.py` writes only `SCORE_COLUMNS` plus `scored_at`. |
 
 ## Resource topology
 
@@ -92,6 +103,11 @@ Each environment resource group contains:
   with `blue`/`green` slots (created only when `online_endpoint_enabled`).
 - **Monitoring** — action group, budget with threshold alerts, and alert rules
   for job failure and endpoint error rate.
+- **App** — a Container Apps environment and a single container app serving
+  `app.py` on 8501 behind managed HTTPS, running the `app` stage of the same
+  Dockerfile under a fourth user-assigned identity that can only *read*. In dev
+  it scales to zero; in prod it holds one replica and sits on the delegated
+  `snet-apps` subnet.
 - **Policy** — four built-in policy assignments at resource-group scope.
 
 ## Threat model
@@ -175,6 +191,7 @@ CI authentication (A.9.2, no static credentials).
 | Class | Mechanism | Target | Rehearsed |
 |---|---|---|---|
 | Traffic | `rollback_endpoint.sh` flips the traffic map back to the retained slot | < 30 s | *pending live apply* |
+| Page | `rollback_app.sh` flips the container app's traffic map back to the retained revision, which is still provisioned at 0% | < 60 s | **fired in anger, 23 s** — see below |
 | Model | `rollback_model.sh` redeploys the prior registered version into the idle slot | < 15 min | *pending live apply* |
 | Image | Re-run prod promotion with the previous digest | < 15 min | *pending live apply* |
 | Infra | `git revert` → CI re-applies; state protected by blob versioning and lease locking | < 30 min | *pending live apply* |
@@ -189,6 +206,24 @@ deliberately left as `pending` rather than filled in with the design targets,
 because an unrehearsed number in this column would be a claim the environment
 has not earned.
 
+The page rollback is the one row that has run for real, and it is worth reading
+as a warning rather than as a credential. A failed smoke test triggered it on
+the first release. It completed in 23 seconds, reported success — and had
+flipped 100% of traffic onto the very revision whose smoke test had just
+failed. Terraform creates the app routing to `latestRevision` rather than to a
+named revision, because on a first release there is nothing to name; the script
+read that unnamed entry as "nothing is live", and its fallback then chose the
+most recently created revision, which is exactly the one it should have been
+running away from.
+
+Two things follow. The first is fixed in code: the flag is resolved to the
+revision it denotes, so the exclusion has something to exclude, and a first
+deploy now correctly reports that there is no rollback target and fails rather
+than inventing one. The second is a caveat on this table — the mechanism has
+still never been rehearsed against a genuine previous revision, because no
+release on this branch has yet had one. It stays *fired in anger* rather than
+*rehearsed* until it has.
+
 ## Cost
 
 Dev, with `online_endpoint_enabled = false`:
@@ -200,6 +235,7 @@ Dev, with `online_endpoint_enabled = false`:
 | Log Analytics (90-day retention, low volume) | ~$5 |
 | Key Vault (RBAC, few operations) | ~$1 |
 | Compute cluster, scales to zero, ~10 h/month of `Standard_DS3_v2` | ~$8 |
+| Container app, `min_replicas = 0`, 1 vCPU / 2 GiB while awake | ~$0–3 |
 | Managed online endpoint | $0 — disabled |
 | **Total** | **~$20/month**, against the spec's $40 ceiling |
 
@@ -463,6 +499,33 @@ az storage blob upload \
   --container-name data --name deployment_events.csv \
   --file data/deployment_events.csv --auth-mode login
 
+# The scoring input, and the page's only source of equipment context. Scores
+# carry a deployment_id and nothing else describing the device, so the Equipment
+# Record, Cross-Vendor Context and Risk Flag Panel are all produced by joining
+# the scored rows back onto this file. Miss it and the page still renders --
+# predictions and gauges appear, every panel that needs context comes up empty,
+# and the only trace is a sidebar warning. It is seeded here rather than by CI
+# because CI holds no data-plane write on `data`, which is the same reason
+# `deployment_events.csv` is seeded here.
+#
+# The smoke fixture goes in with it, and that is not tidiness. The batch smoke
+# test publishes into the same append-only scores container as a real run, the
+# page opens on the newest run, and in dev the newest run is therefore usually
+# the smoke test's five synthetic rows -- whose ids appear nowhere in the real
+# input. Seeding only the real file leaves the page looking broken again after
+# every deploy, which is worse than never having fixed it, because it looks
+# fixed. The two schemas are identical and the id spaces do not overlap
+# (`UPC_*` against `smoke-*`), so the join simply finds whichever it is given.
+# Prod has no smoke step and so never carries these rows.
+{ cat data/upcoming_deployments.csv
+  tail -n +2 deploy/azure/fixtures/upcoming_smoke.csv
+} > /tmp/upcoming_seed.csv
+
+az storage blob upload \
+  --account-name "$(terraform -chdir=infra/azure output -raw storage_account_name)" \
+  --container-name data --name upcoming_deployments.csv \
+  --file /tmp/upcoming_seed.csv --auth-mode login
+
 # Build and push, emitting a digest.
 AZURE_ACR_NAME=$(terraform -chdir=infra/azure output -raw container_registry_name) \
   bash deploy/azure/build.sh dev
@@ -485,11 +548,19 @@ bash deploy/azure/promote_traffic.sh dev green blue
 # workspace store because it cannot write to the immutable scores container,
 # and a short cluster job then publishes it there. Invoking the endpoint
 # directly scores correctly but produces no evidence -- the run still succeeds.
+#
+# Score the seeded input, not the smoke fixture. Both publish real scores and
+# both look correct from the pipeline's side, but the page joins scored rows
+# back onto `data/upcoming_deployments.csv` for equipment context, and the
+# fixture's ids (`smoke-001`...) appear nowhere in it. Scoring the fixture
+# therefore leaves the page rendering predictions with every context panel
+# blank -- which is exactly what it did until this line named the right file.
 bash deploy/azure/deploy_batch.sh dev "$FIRMAWARE_MODEL_VERSION"
-bash deploy/azure/run_batch_scoring.sh dev deploy/azure/fixtures/upcoming_smoke.csv
+bash deploy/azure/run_batch_scoring.sh dev data/upcoming_deployments.csv
 
 # Or drive the same path and assert on the published object, including that
-# overwriting it is refused.
+# overwriting it is refused. This is a *test*, not a way to feed the page: it
+# scores five synthetic rows on purpose.
 bash deploy/azure/batch_smoke_test.sh dev
 
 # Verify every control. Env-aware: announces dev relaxations, fails on breaks.
