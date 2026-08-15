@@ -69,6 +69,8 @@ the contract it is built against is [`../../docs/design/azure-implementation-spe
 | `TF_VAR_app_image` is now required to plan | `app_image` has no safe default: the module rejects anything that is not `@sha256:…`, because a tag can move between the plan and the apply. The value only matters on create — changes are ignored — but a plan still has to name one. A local `terraform plan -detailed-exitcode` drift check therefore needs `TF_VAR_app_image=$(az containerapp show -n ca-firmaware-<env> -g <rg> --query "properties.template.containers[0].image" -o tsv)` in front of it, otherwise it fails the precondition rather than reporting drift. |
 | Terraform's `latestRevision: true` had to be pinned before every deploy | On the very first release there is no revision to name, so Terraform creates the app with a traffic map of `latestRevision: true`. Left that way, `az containerapp update` hands the new revision **100% of traffic the instant it exists** — before anything has tested it, which is precisely the design this pipeline exists to avoid. `deploy_app.sh` therefore resolves the live revision *by name* and pins traffic to it before creating the new one, then re-reads the traffic map and fails if any of it moved. |
 | The page subnet is a `/23`, not the `/27` minimum | Prod only; dev runs `network_isolation = false` and has no VNet at all, so the app takes a Consumption-only environment on platform-managed networking. Where there is a VNet, Container Apps holds addresses for superseded revisions during a rollout, and the environment's subnet **cannot be resized afterwards** — changing it means recreating the environment, which changes the public FQDN. `/23` is chosen once, at 10.42.8.0/23, past the three existing `/24`s. The delegation to `Microsoft.App/environments` and the workload-profile block switch together, because workload profiles require a delegated subnet and Consumption-only rejects one. |
+| Adding the page pushed the batch check past the assertion window | The five-minute `AADSTS700024` problem the security gate already solves, reached from a new direction. The token minted at login covers ARM, so registering assets, resolving the model and pointing the endpoint all kept working from cache; the batch smoke test is the first step to ask for a **storage** audience, and acquiring a new audience needs the assertion rather than the cache. The page steps sit at the top of the job — deliberately, so a page regression reports in about three minutes instead of twenty — and the ten minutes they add is what moved that request outside the window. Worth stating plainly because it is a property of *ordering*, not of either feature: inserting any slow step ahead of a first-use-of-an-audience step can reproduce it, and the failure names a credential rather than the thing that moved. Fixed with a refresh immediately before the consumer, which is where the existing one sits too. |
+| An unreadable control fails; an absent one does not | `length(properties.configuration.secrets)` errored on exactly the apps that should pass it, because an app with no secrets reports `"secrets": null` and JMESPath `length(null)` raises. The tempting fix is `\|\| echo 0`, which is the same laundering of an error into a passing value that control 6 of the security gate was built to remove. The distinction the gate actually needs is between *absent* and *unreadable*: the object is read as JSON, a non-zero exit or empty output still fails the deploy, and only a null or missing key counts as the genuine zero it is. The check was strengthened while open, to assert the positive form as well — the registry must pull with an identity and reference no password secret, since an empty secret list sitting beside a password reference would otherwise pass. |
 
 ## Resource topology
 
@@ -187,7 +189,7 @@ CI authentication (A.9.2, no static credentials).
 | Class | Mechanism | Target | Rehearsed |
 |---|---|---|---|
 | Traffic | `rollback_endpoint.sh` flips the traffic map back to the retained slot | < 30 s | *pending live apply* |
-| Page | `rollback_app.sh` flips the container app's traffic map back to the retained revision, which is still provisioned at 0% | < 60 s | *pending live apply* |
+| Page | `rollback_app.sh` flips the container app's traffic map back to the retained revision, which is still provisioned at 0% | < 60 s | **fired in anger, 23 s** — see below |
 | Model | `rollback_model.sh` redeploys the prior registered version into the idle slot | < 15 min | *pending live apply* |
 | Image | Re-run prod promotion with the previous digest | < 15 min | *pending live apply* |
 | Infra | `git revert` → CI re-applies; state protected by blob versioning and lease locking | < 30 min | *pending live apply* |
@@ -201,6 +203,24 @@ Rehearsal times are recorded here after the first live apply. They are
 deliberately left as `pending` rather than filled in with the design targets,
 because an unrehearsed number in this column would be a claim the environment
 has not earned.
+
+The page rollback is the one row that has run for real, and it is worth reading
+as a warning rather than as a credential. A failed smoke test triggered it on
+the first release. It completed in 23 seconds, reported success — and had
+flipped 100% of traffic onto the very revision whose smoke test had just
+failed. Terraform creates the app routing to `latestRevision` rather than to a
+named revision, because on a first release there is nothing to name; the script
+read that unnamed entry as "nothing is live", and its fallback then chose the
+most recently created revision, which is exactly the one it should have been
+running away from.
+
+Two things follow. The first is fixed in code: the flag is resolved to the
+revision it denotes, so the exclusion has something to exclude, and a first
+deploy now correctly reports that there is no rollback target and fails rather
+than inventing one. The second is a caveat on this table — the mechanism has
+still never been rehearsed against a genuine previous revision, because no
+release on this branch has yet had one. It stays *fired in anger* rather than
+*rehearsed* until it has.
 
 ## Cost
 
