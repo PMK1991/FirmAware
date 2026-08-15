@@ -69,6 +69,15 @@ CVE-2026-2652
 CVE-2026-2393
 CVE-2025-14279
 CVE-2026-4035
+# Same layer, same reason, added 2026-08-15. The trace API routes were never
+# registered in mlflow.server.auth's _before_request validator map, so any
+# authenticated user can read, modify or delete another experiment's traces.
+# It is conditional on MLflow's own auth being enabled -- that is the module
+# holding the missing check -- and this image never loads it. Tracking is the
+# AML-hosted server, authorised by Entra ID through azureml-mlflow, which
+# applies its own workspace RBAC and does not route through mlflow.server.
+# The named fix, 3.14.0, is on the far side of the MLflow 2 pin above.
+CVE-2026-8147
 
 # --- mlflow 2.22.5: insecure temporary directory ------------------------------
 # The one client-side item. It needs a local attacker already executing code

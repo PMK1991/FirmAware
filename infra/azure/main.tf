@@ -192,7 +192,6 @@ module "app" {
   source = "./modules/app"
 
   name_prefix                     = local.name_prefix
-  env                             = var.env
   location                        = var.location
   resource_group_name             = module.foundation.resource_group_name
   tags                            = local.tags

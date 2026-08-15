@@ -172,6 +172,7 @@ resource "azurerm_subnet_network_security_group_association" "scoring" {
 # three read roles and AcrPull and can therefore exfiltrate nothing it could not
 # already display.
 resource "azurerm_network_security_group" "apps" {
+  # checkov:skip=CKV_AZURE_160:port 80 is open so the ingress can answer it with its own 301. allow_insecure_connections = false means the container app never serves content over plaintext -- the listener exists only to redirect. Closing it here would not remove a plaintext path, it would replace a redirect with a timeout for anyone who typed http://, which is worse for the user and no better for the attacker. The claim is checked rather than asserted: smoke_test_app.sh section [3] fails the deploy if http:// ever returns 200 instead of a redirect or a refusal.
   name                = "nsg-${var.name_prefix}-apps"
   location            = var.location
   resource_group_name = var.resource_group_name
