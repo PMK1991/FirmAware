@@ -118,17 +118,53 @@ actual_image="$(az_app revision show --revision "${revision}" \
 pass "image is ${actual_image}"
 
 # --- [5] no secrets -----------------------------------------------------------
-# `length(@)` rather than `length(value)`, and no `|| echo 0`. The security gate
-# learned this the hard way: a query that errors must fail the check, not be
-# laundered into a passing zero.
+# The rule from the security gate still holds: a control that cannot be read
+# must fail, never be laundered into a passing zero. What that rule does NOT
+# license is confusing "absent" with "unreadable".
+#
+# `length(properties.configuration.secrets)` did exactly that. An app with no
+# secrets reports `"secrets": null`, and JMESPath `length(null)` raises -- so the
+# query failed on precisely the apps that pass this check. Observed on the first
+# real deploy, which is the only place it could show up.
+#
+# So: read the object, and separate the two failures. A non-zero az exit or
+# empty output is unreadable and fails. A null or missing `secrets` key is a
+# genuine, readable zero.
 
 echo "[5] the app holds no secrets"
 
-secret_count="$(az_app show --query "length(properties.configuration.secrets)" -o tsv 2>/dev/null)" \
-  || fail "could not read the app's secret list; treating an unreadable control as unverified, not as a pass"
-[[ "${secret_count}" == "0" || -z "${secret_count}" ]] \
-  || fail "the app declares ${secret_count} secret(s); storage and the registry are both reached with the managed identity, so there is nothing a secret should be holding"
-pass "properties.configuration.secrets is empty"
+config_json="$(az_app show --query "properties.configuration" -o json)" \
+  || fail "could not read the app's configuration; treating an unreadable control as unverified, not as a pass"
+[[ -n "${config_json}" ]] \
+  || fail "the app's configuration came back empty; treating an unreadable control as unverified, not as a pass"
+
+python3 -c '
+import json, sys
+
+config = json.loads(sys.argv[1])
+secrets = config.get("secrets") or []
+if secrets:
+    names = ", ".join(item.get("name", "?") for item in secrets)
+    raise SystemExit(
+        f"the app declares {len(secrets)} secret(s) ({names}); storage and the "
+        "registry are both reached with the managed identity, so there is "
+        "nothing a secret should be holding"
+    )
+
+# The registry pull is the one place a secret would otherwise be required, so
+# assert the positive form too: it must name an identity and reference no
+# password. An empty secret list with a password reference would be a
+# misconfiguration this check would otherwise wave through.
+for registry in config.get("registries") or []:
+    server = registry.get("server") or "?"
+    if not registry.get("identity"):
+        raise SystemExit(f"registry {server} does not pull with a managed identity")
+    if registry.get("passwordSecretRef"):
+        raise SystemExit(f"registry {server} references a password secret")
+' "${config_json}" \
+  || fail "the app's secret and registry configuration is not keyless (reason above)"
+
+pass "no secrets, and the registry pulls with the managed identity"
 
 # --- [6] configured against this deployment's own paths -----------------------
 
