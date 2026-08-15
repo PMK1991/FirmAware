@@ -71,6 +71,7 @@ the contract it is built against is [`../../docs/design/azure-implementation-spe
 | The page subnet is a `/23`, not the `/27` minimum | Prod only; dev runs `network_isolation = false` and has no VNet at all, so the app takes a Consumption-only environment on platform-managed networking. Where there is a VNet, Container Apps holds addresses for superseded revisions during a rollout, and the environment's subnet **cannot be resized afterwards** — changing it means recreating the environment, which changes the public FQDN. `/23` is chosen once, at 10.42.8.0/23, past the three existing `/24`s. The delegation to `Microsoft.App/environments` and the workload-profile block switch together, because workload profiles require a delegated subnet and Consumption-only rejects one. |
 | Adding the page pushed the batch check past the assertion window | The five-minute `AADSTS700024` problem the security gate already solves, reached from a new direction. The token minted at login covers ARM, so registering assets, resolving the model and pointing the endpoint all kept working from cache; the batch smoke test is the first step to ask for a **storage** audience, and acquiring a new audience needs the assertion rather than the cache. The page steps sit at the top of the job — deliberately, so a page regression reports in about three minutes instead of twenty — and the ten minutes they add is what moved that request outside the window. Worth stating plainly because it is a property of *ordering*, not of either feature: inserting any slow step ahead of a first-use-of-an-audience step can reproduce it, and the failure names a credential rather than the thing that moved. Fixed with a refresh immediately before the consumer, which is where the existing one sits too. |
 | An unreadable control fails; an absent one does not | `length(properties.configuration.secrets)` errored on exactly the apps that should pass it, because an app with no secrets reports `"secrets": null` and JMESPath `length(null)` raises. The tempting fix is `\|\| echo 0`, which is the same laundering of an error into a passing value that control 6 of the security gate was built to remove. The distinction the gate actually needs is between *absent* and *unreadable*: the object is read as JSON, a non-zero exit or empty output still fails the deploy, and only a null or missing key counts as the genuine zero it is. The check was strengthened while open, to assert the positive form as well — the registry must pull with an identity and reference no password secret, since an empty secret list sitting beside a password reference would otherwise pass. |
+| The page's context comes from the scoring **input**, and nothing in CI writes it | A score row carries `deployment_id`, a probability, a band and a model run — nothing that says what the device *is*. Every panel describing equipment (Equipment Record, Cross-Vendor & Vulnerability Context, Risk Flag Panel, and the vendor and deployment-type breakdowns) is produced by joining scored rows back onto `data/upcoming_deployments.csv`. Two consequences, and both bit. The file is seeded by a human at bootstrap, because CI holds no data-plane write on `data` and deliberately should not — so a fresh environment has scores and no context until someone lands it. And the run that produces the scores has to have scored *that* file: the batch **smoke test** scores a five-row fixture whose ids (`smoke-001`…) exist nowhere in it, so a page fed only by smoke runs renders predictions with every context panel empty. The failure is quiet by construction — `app.py` degrades to a sidebar warning rather than stopping, which is right for an operator page and unhelpful for whoever wired it. |
 
 ## Resource topology
 
@@ -497,6 +498,19 @@ az storage blob upload \
   --container-name data --name deployment_events.csv \
   --file data/deployment_events.csv --auth-mode login
 
+# The scoring input, and the page's only source of equipment context. Scores
+# carry a deployment_id and nothing else describing the device, so the Equipment
+# Record, Cross-Vendor Context and Risk Flag Panel are all produced by joining
+# the scored rows back onto this file. Miss it and the page still renders --
+# predictions and gauges appear, every panel that needs context comes up empty,
+# and the only trace is a sidebar warning. It is seeded here rather than by CI
+# because CI holds no data-plane write on `data`, which is the same reason
+# `deployment_events.csv` is seeded here.
+az storage blob upload \
+  --account-name "$(terraform -chdir=infra/azure output -raw storage_account_name)" \
+  --container-name data --name upcoming_deployments.csv \
+  --file data/upcoming_deployments.csv --auth-mode login
+
 # Build and push, emitting a digest.
 AZURE_ACR_NAME=$(terraform -chdir=infra/azure output -raw container_registry_name) \
   bash deploy/azure/build.sh dev
@@ -519,11 +533,19 @@ bash deploy/azure/promote_traffic.sh dev green blue
 # workspace store because it cannot write to the immutable scores container,
 # and a short cluster job then publishes it there. Invoking the endpoint
 # directly scores correctly but produces no evidence -- the run still succeeds.
+#
+# Score the seeded input, not the smoke fixture. Both publish real scores and
+# both look correct from the pipeline's side, but the page joins scored rows
+# back onto `data/upcoming_deployments.csv` for equipment context, and the
+# fixture's ids (`smoke-001`...) appear nowhere in it. Scoring the fixture
+# therefore leaves the page rendering predictions with every context panel
+# blank -- which is exactly what it did until this line named the right file.
 bash deploy/azure/deploy_batch.sh dev "$FIRMAWARE_MODEL_VERSION"
-bash deploy/azure/run_batch_scoring.sh dev deploy/azure/fixtures/upcoming_smoke.csv
+bash deploy/azure/run_batch_scoring.sh dev data/upcoming_deployments.csv
 
 # Or drive the same path and assert on the published object, including that
-# overwriting it is refused.
+# overwriting it is refused. This is a *test*, not a way to feed the page: it
+# scores five synthetic rows on purpose.
 bash deploy/azure/batch_smoke_test.sh dev
 
 # Verify every control. Env-aware: announces dev relaxations, fails on breaks.
