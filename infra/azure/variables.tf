@@ -271,3 +271,31 @@ variable "monthly_budget" {
   description = "Budget in USD; alerts fire at 50, 80 and 100 percent of it."
   default     = 50
 }
+
+# --- the hosted page ----------------------------------------------------------
+
+variable "app_image" {
+  type        = string
+  description = <<-EOT
+    Digest-pinned image for the page, as emitted by deploy/azure/build.sh with
+    FIRMAWARE_IMAGE_TARGET=app.
+
+    There is deliberately no default. A digest is the only thing that identifies
+    what will actually run, and inventing one here would either be a lie or a
+    tag. The value only matters on create -- the module ignores later changes,
+    because deploy_app.sh owns the image from the first release onwards -- but a
+    plan still has to name one.
+  EOT
+  default     = ""
+}
+
+variable "app_min_replicas" {
+  type        = number
+  description = "0 in dev, 1 in prod. Zero means an idle page costs nothing and a visitor pays a cold start."
+  default     = 0
+}
+
+variable "app_max_replicas" {
+  type    = number
+  default = 3
+}

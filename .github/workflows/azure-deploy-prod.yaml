@@ -57,6 +57,7 @@ jobs:
       image_digest: ${{ steps.resolve.outputs.image_digest }}
       model_version: ${{ steps.resolve.outputs.model_version }}
       source: ${{ steps.resolve.outputs.source }}
+      app_image_digest: ${{ steps.resolve_app.outputs.app_image_digest }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -78,6 +79,9 @@ jobs:
 
       - name: Install az ml extension
         run: az extension add --name ml --yes --allow-preview false
+
+      - name: Install az containerapp extension
+        run: az extension add --name containerapp --yes --allow-preview false
 
       # On a tag the digest is READ from dev; on a manual run it is SUPPLIED and
       # then checked against dev. Both paths end with a digest that dev is
@@ -168,6 +172,51 @@ jobs:
             echo "source=${source}"
           } >> "$GITHUB_OUTPUT"
 
+      # The page is promoted on exactly the same terms as the model image: prod
+      # runs the bytes dev is serving, not a rebuild of the same commit.
+      #
+      # Its provenance is read from the revision actually carrying traffic rather
+      # than from the app's current template. Those differ for the whole window
+      # between deploy_app.sh creating a revision and promote_app.sh moving
+      # traffic to it -- and a promotion that picked up the template would ship
+      # the one revision dev had deliberately not promoted yet.
+      - name: Resolve the page digest from dev
+        id: resolve_app
+        env:
+          DEV_APP: ca-firmaware-dev
+        run: |
+          set -euo pipefail
+
+          traffic="$(az containerapp show --name "${DEV_APP}" \
+            --resource-group "${DEV_RESOURCE_GROUP}" \
+            --query "properties.configuration.ingress.traffic" -o json 2>/dev/null || echo "[]")"
+
+          revision="$(python3 -c "
+          import json, sys
+          entries = json.loads(sys.argv[1] or '[]') or []
+          serving = [item for item in entries if item.get('weight', 0) > 0]
+          best = max(serving, key=lambda item: item['weight'], default=None)
+          print('' if best is None else (best.get('revisionName') or ''))
+          " "${traffic}")"
+
+          if [[ -z "${revision}" ]]; then
+            echo "::error::dev's page is serving no traffic, so there is nothing to promote." >&2
+            echo "Deploy the page to dev first: it is the provenance prod reads." >&2
+            exit 1
+          fi
+
+          digest="$(az containerapp revision show --name "${DEV_APP}" \
+            --resource-group "${DEV_RESOURCE_GROUP}" --revision "${revision}" \
+            --query "properties.template.containers[0].image" -o tsv)"
+
+          if [[ "${digest}" != *"@sha256:"* ]]; then
+            echo "::error::dev's page revision ${revision} runs a mutable tag (${digest})" >&2
+            exit 1
+          fi
+
+          echo "dev page: ${revision} running ${digest}"
+          echo "app_image_digest=${digest}" >> "$GITHUB_OUTPUT"
+
   deploy:
     needs: verify-dev-provenance
     runs-on: ubuntu-latest
@@ -211,6 +260,9 @@ jobs:
       - name: Install az ml extension
         run: az extension add --name ml --yes --allow-preview false
 
+      - name: Install az containerapp extension
+        run: az extension add --name containerapp --yes --allow-preview false
+
       - name: Import the approved digest into the prod registry
         id: image
         env:
@@ -233,6 +285,30 @@ jobs:
 
           echo "reference=${login_server}/${repo}@${digest}" >> "$GITHUB_OUTPUT"
           echo "acr=${acr}" >> "$GITHUB_OUTPUT"
+
+      # The page image, imported the same way and for the same reason. Written
+      # into TF_VAR_app_image rather than a step output because Terraform needs
+      # it: the container app is digest-pinned, so the plan cannot be produced
+      # without naming the digest, and the plan runs before any of the page steps.
+      - name: Import the approved page digest
+        env:
+          SOURCE: ${{ needs.verify-dev-provenance.outputs.app_image_digest }}
+          ACR: ${{ steps.image.outputs.acr }}
+        run: |
+          set -euo pipefail
+          login_server="$(az acr show -n "${ACR}" --query loginServer -o tsv)"
+          repo_and_digest="${SOURCE#*.azurecr.io/}"
+          repo="${repo_and_digest%%@*}"
+          digest="${SOURCE##*@}"
+
+          az acr import \
+            --name "${ACR}" \
+            --source "${SOURCE}" \
+            --image "${repo}@${digest}" \
+            --force
+
+          echo "TF_VAR_app_image=${login_server}/${repo}@${digest}" >> "$GITHUB_ENV"
+          echo "prod page image: ${login_server}/${repo}@${digest}"
 
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
@@ -268,6 +344,11 @@ jobs:
             echo "instance_type=$(terraform output -raw online_instance_type)"
             echo "min_instances=$(terraform output -raw online_min_instances)"
             echo "cicd_principal=$(terraform output -raw cicd_identity_principal_id)"
+            echo "app_url=$(terraform output -raw app_url)"
+            echo "app_client_id=$(terraform output -raw app_identity_client_id)"
+            echo "app_principal=$(terraform output -raw app_identity_principal_id)"
+            echo "scores_uri=$(terraform output -raw scores_uri)"
+            echo "scores_container_id=$(terraform output -raw scores_container_id)"
           } >> "$GITHUB_OUTPUT"
 
       # Registered before the deployment that references it. The environment
@@ -319,6 +400,36 @@ jobs:
           bash deploy/azure/rollback_endpoint.sh prod \
             "${{ steps.deploy.outputs.live_deployment }}"
 
+      # --- the page -------------------------------------------------------------
+      # After the model, unlike dev, and for one reason: in prod the page is the
+      # thing a human looks at to decide whether the promotion was good. It should
+      # not be mid-rollout while that judgement is being made.
+
+      - name: Deploy the page into a new revision at 0% traffic
+        id: deploy_app
+        run: bash deploy/azure/deploy_app.sh prod "${{ env.TF_VAR_app_image }}"
+
+      - name: Smoke test the new page revision
+        env:
+          FIRMAWARE_IMAGE_DIGEST: ${{ env.TF_VAR_app_image }}
+          FIRMAWARE_SCORES_URI: ${{ steps.tf.outputs.scores_uri }}
+          FIRMAWARE_APP_CLIENT_ID: ${{ steps.tf.outputs.app_client_id }}
+          FIRMAWARE_APP_PRINCIPAL_ID: ${{ steps.tf.outputs.app_principal }}
+          FIRMAWARE_SCORES_CONTAINER_ID: ${{ steps.tf.outputs.scores_container_id }}
+        run: bash deploy/azure/smoke_test_app.sh prod "${{ steps.deploy_app.outputs.revision }}"
+
+      - name: Promote the page
+        run: |
+          bash deploy/azure/promote_app.sh prod \
+            "${{ steps.deploy_app.outputs.revision }}" \
+            "${{ steps.deploy_app.outputs.previous_revision }}"
+
+      - name: Roll the page back on failure
+        if: failure() && steps.deploy_app.outcome == 'success'
+        run: |
+          bash deploy/azure/rollback_app.sh prod \
+            "${{ steps.deploy_app.outputs.previous_revision }}"
+
       # Same reason as dev: the client assertion is valid five minutes, and the
       # staged traffic promotion above takes longer than that on its own. A gate
       # running on an expired credential reports failures it never observed.
@@ -350,5 +461,8 @@ jobs:
             echo "- prod reference: \`${{ steps.image.outputs.reference }}\`"
             echo "- model version: \`${{ needs.verify-dev-provenance.outputs.model_version }}\`"
             echo "- deployment slot: \`${{ steps.deploy.outputs.deployment || 'n/a' }}\`"
+            echo "- page image: \`${{ env.TF_VAR_app_image || 'n/a' }}\`"
+            echo "- page revision: \`${{ steps.deploy_app.outputs.revision || 'n/a' }}\`"
+            echo "- page url: ${{ steps.tf.outputs.app_url || 'n/a' }}"
             echo "- approved by: \`${{ github.actor }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

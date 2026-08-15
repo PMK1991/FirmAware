@@ -28,7 +28,9 @@ import streamlit as st
 
 from firmaware.features import derive_features
 from firmaware.io import (
+    is_abfss_uri,
     is_gcs_uri,
+    is_remote_uri,
     join_uri,
     list_scores_uris,
     materialize_artifacts,
@@ -50,7 +52,7 @@ def resolve_uri(env_var: str, default: str, demo: str, probe: str | None = None)
     configured = os.getenv(env_var)
     if configured:
         return configured
-    if is_gcs_uri(default) or Path(probe or default).exists():
+    if is_remote_uri(default) or Path(probe or default).exists():
         return default
     fallback = DEMO_DIR / demo
     return str(fallback) if fallback.exists() else default
@@ -528,8 +530,14 @@ st.sidebar.caption(
     "Read-only view. Scores are produced by the batch pipeline; this page never "
     "trains or re-scores."
 )
-if is_gcs_uri(selected_run):
-    st.sidebar.caption("Reading published cloud scores.")
+# Name the backing store rather than just "cloud": when a page is showing a
+# GO/NO_GO decision, which store it came from is part of reading it correctly.
+if is_abfss_uri(selected_run):
+    st.sidebar.caption("Reading published scores from Azure Data Lake Storage.")
+elif is_gcs_uri(selected_run):
+    st.sidebar.caption("Reading published scores from Google Cloud Storage.")
+elif str(DEMO_DIR) in str(selected_run):
+    st.sidebar.caption("Sample run bundled with the checkout, not a live score.")
 
 view = st.radio(
     "View",

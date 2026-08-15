@@ -20,6 +20,15 @@ resource "azurerm_user_assigned_identity" "endpoint" {
   tags                = var.tags
 }
 
+# The page. A fourth trust boundary, and the only one reachable from the
+# internet, which is why it is the narrowest.
+resource "azurerm_user_assigned_identity" "app" {
+  name                = "id-${var.name_prefix}-app"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  tags                = var.tags
+}
+
 # The deploy identity is NOT created here. bootstrap.sh creates it, because it
 # has to exist before the first `terraform apply` -- it is the identity that runs
 # that apply from CI, and Terraform cannot create the credential it authenticates
@@ -247,6 +256,55 @@ resource "azurerm_role_assignment" "endpoint_acr_pull" {
 # Note what is absent: the endpoint has no grant on data and none on scores. A
 # compromised serving container cannot read the training corpus or touch the
 # prediction record.
+
+# --- app identity -------------------------------------------------------------
+# Renders the page. Reads what the pipeline published, and can change none of it.
+#
+# This identity is attached to a container that anonymous callers on the internet
+# can reach (see "A public page" in infra/azure/README.md), so it is the one
+# principal in this file whose blast radius is bounded by nothing but these four
+# assignments. Every one of them is read-only, and that is the compensating
+# control the public-access decision rests on.
+#
+# It is deliberately NOT granted scores_appender. That role is what lets the
+# batch pipeline add evidence; a page that displays evidence must not be able to
+# add to it, or the thing a reader is looking at stops being a record of what the
+# pipeline decided. It also holds no Key Vault role, no Contributor at any scope,
+# and nothing at all on the `collected` container -- raw inference payloads are
+# not the page's business.
+
+# The published score objects. This is the page's actual subject.
+resource "azurerm_role_assignment" "app_scores_reader" {
+  scope                = var.container_ids["scores"]
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = azurerm_user_assigned_identity.app.principal_id
+}
+
+# metadata.json, for the champion threshold. The page reads the threshold rather
+# than hardcoding one, so the bands it draws cannot drift from the model that
+# produced the scores.
+resource "azurerm_role_assignment" "app_artifacts_reader" {
+  scope                = var.container_ids["artifacts"]
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = azurerm_user_assigned_identity.app.principal_id
+}
+
+# The upcoming-deployment inputs, for the equipment context shown alongside each
+# decision. Read-only: the page must never be able to alter the inputs a score
+# was computed from.
+resource "azurerm_role_assignment" "app_data_reader" {
+  scope                = var.container_ids["data"]
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = azurerm_user_assigned_identity.app.principal_id
+}
+
+# Pulls its own image. Pull only, and from the same registry the pipeline pushes
+# to, so the page and the scorer are provably built from one recipe.
+resource "azurerm_role_assignment" "app_acr_pull" {
+  scope                = var.container_registry_id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.app.principal_id
+}
 
 # --- CI/CD identity -----------------------------------------------------------
 # Deploys. Federated to GitHub, so it holds no password at all.

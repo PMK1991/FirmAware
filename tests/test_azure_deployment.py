@@ -854,7 +854,7 @@ class AzureAssetRegistrationTests(unittest.TestCase):
         pyproject = _read("pyproject.toml")
         self.assertIn("azureml-inference-server-http", pyproject)
         self.assertIn("azureml-mlflow", pyproject)
-        self.assertIn("PIP_EXTRAS=train,azure", (AZURE_DEPLOY / "build.sh").read_text())
+        self.assertIn('PIP_EXTRAS:-train,azure', (AZURE_DEPLOY / "build.sh").read_text())
 
     def test_serving_image_starts_an_inference_server(self) -> None:
         """AML does not override a custom image's entrypoint on an online
@@ -875,7 +875,7 @@ class AzureAssetRegistrationTests(unittest.TestCase):
         # The GCP path and the local CLI both depend on the runtime entrypoint,
         # which is why this is a separate target rather than an edit in place.
         self.assertIn('ENTRYPOINT ["python", "-m", "firmaware"]', dockerfile)
-        self.assertIn("--target azureml", (AZURE_DEPLOY / "build.sh").read_text())
+        self.assertIn('FIRMAWARE_IMAGE_TARGET:-azureml', (AZURE_DEPLOY / "build.sh").read_text())
 
     def test_a_dirty_tree_cannot_be_published_under_a_commit_sha(self) -> None:
         """The tag is a commit SHA; the build context is the working tree.
@@ -926,7 +926,6 @@ class AzureAssetRegistrationTests(unittest.TestCase):
         build = workflow.split("name: Build image")[1]
         self.assertIn("PIP_EXTRAS=train,azure", build)
         self.assertIn("--target azureml", build)
-
     def test_serving_port_and_routes_agree_with_the_server_defaults(self) -> None:
         spec = yaml.safe_load((AZURE_DEPLOY / "azureml" / "environment.yaml").read_text())
         inference = spec["inference_config"]
@@ -958,10 +957,14 @@ class DockerfileTargetTests(unittest.TestCase):
             (".github/workflows/ci.yaml", "target: runtime"),
             (".github/workflows/azure-ci.yaml", "--target azureml"),
             ("deploy/gcp/build.sh", "--target runtime"),
-            ("deploy/azure/build.sh", "--target azureml"),
+            # build.sh takes the target from FIRMAWARE_IMAGE_TARGET so the same
+            # script can publish the page image, but it still always passes one
+            # and it still defaults to the serving stage.
+            ("deploy/azure/build.sh", '--target "${target}"'),
+            ("deploy/azure/build.sh", "FIRMAWARE_IMAGE_TARGET:-azureml"),
         }
         for path, expected in builds:
-            with self.subTest(path=path):
+            with self.subTest(path=path, expected=expected):
                 self.assertIn(expected, _read(*path.split("/")))
 
 
@@ -1200,6 +1203,189 @@ class AzurePrivilegeTests(unittest.TestCase):
             "FIRMAWARE_MIN_INSTANCES: ${{ steps.tf.outputs.min_instances }}",
             _read(".github", "workflows", "azure-deploy-prod.yaml"),
         )
+
+
+class AppHostingTests(unittest.TestCase):
+    """The page is a second workload on the same account, and the whole point of
+    hosting it this way is that it can read published scores without a credential
+    existing anywhere. These assert the properties that make that true."""
+
+    def test_the_app_stage_ships_the_page_and_stays_non_root(self) -> None:
+        dockerfile = _read("Dockerfile")
+        stage = dockerfile.split("FROM runtime AS app")[1]
+        for path in ("app.py", "demo", ".streamlit"):
+            self.assertIn(path, stage)
+        # The stage escalates to root only to copy, then drops back. A page
+        # reachable from the internet is the last place to run as uid 0.
+        self.assertIn("USER 10001:10001", stage)
+        self.assertLess(stage.index("USER root"), stage.index("USER 10001:10001"))
+        self.assertIn("8501", stage)
+
+    def test_the_app_stage_proves_its_dependencies_at_build_time(self) -> None:
+        """The page needs the `app` and `azure` extras. Installed with the wrong
+        set the image still builds and still starts -- it fails later, on the
+        import, in a running replica, which is the expensive place to find out."""
+        stage = _read("Dockerfile").split("FROM runtime AS app")[1]
+        self.assertIn("import streamlit", stage)
+        self.assertIn("azure.identity", stage)
+        for workflow in ("azure-ci.yaml", "azure-deploy-dev.yaml"):
+            text = _read(".github", "workflows", workflow)
+            self.assertRegex(text, r"PIP_EXTRAS[=:] ?app,azure")
+
+    def test_the_page_identity_can_only_read(self) -> None:
+        identity = _read("infra", "azure", "modules", "identity", "main.tf")
+        assignments = re.findall(
+            r'resource "azurerm_role_assignment" "(app_[a-z_]+)"', identity
+        )
+        self.assertEqual(
+            sorted(assignments),
+            ["app_acr_pull", "app_artifacts_reader", "app_data_reader", "app_scores_reader"],
+        )
+        for name in assignments:
+            block = identity.split(f'resource "azurerm_role_assignment" "{name}"')[
+                1
+            ].split("resource ")[0]
+            self.assertNotIn("scores_appender", block)
+            self.assertNotIn("Contributor", block)
+
+    def test_the_page_cannot_write_scores(self) -> None:
+        """The page renders evidence; it must not be able to become a source of
+        it. Anything able to append to the scores container can publish rows the
+        pipeline never produced, and nothing downstream would tell the difference."""
+        identity = _read("infra", "azure", "modules", "identity", "main.tf")
+        granted = [
+            block
+            for block in identity.split('resource "azurerm_role_assignment" "')[1:]
+            if "azurerm_user_assigned_identity.app.principal_id" in block.split("\n}")[0]
+        ]
+        self.assertEqual(len(granted), 4)
+        for block in granted:
+            body = block.split("\n}")[0]
+            self.assertNotIn("scores_appender", body)
+            self.assertNotIn("Key Vault", body)
+            self.assertNotIn("Contributor", body)
+
+    def test_the_container_app_holds_no_secrets(self) -> None:
+        app = _read("infra", "azure", "modules", "app", "main.tf")
+        self.assertNotIn("secret {", app)
+        self.assertNotIn("registry_password", app)
+        # Both pulls and data reads go through the same managed identity, so
+        # there is nothing left that would need one.
+        self.assertIn("identity = var.app_identity_id", app)
+        self.assertIn("AZURE_CLIENT_ID", app)
+
+    def test_terraform_owns_the_app_but_not_the_release(self) -> None:
+        """Same split as the batch endpoint: Terraform describes the app, a
+        deploy describes the revision. Without this the next apply silently
+        reverts a promotion, or rolls the image back to whatever the last apply
+        happened to see."""
+        app = _read("infra", "azure", "modules", "app", "main.tf")
+        ignored = app.split("ignore_changes = [")[1].split("\n    ]")[0]
+        self.assertIn("container[0].image", ignored)
+        self.assertIn("traffic_weight", ignored)
+
+    def test_the_image_must_be_a_digest(self) -> None:
+        app = _read("infra", "azure", "modules", "app", "main.tf")
+        self.assertIn("@sha256:", app)
+        self.assertIn("precondition", app)
+
+    def test_the_scores_uri_points_at_the_container_root(self) -> None:
+        """Score objects are written to the container root as
+        scores_<timestamp>_<jobid>.csv. A prefix under it lists nothing, and the
+        page then falls back to the committed demo fixture -- rendering plausible
+        numbers that came from the repository rather than from the pipeline."""
+        app = _read("infra", "azure", "modules", "app", "main.tf")
+        line = [ln for ln in app.splitlines() if "FIRMAWARE_SCORES_URI" in ln]
+        self.assertTrue(line)
+        block = app.split('name  = "FIRMAWARE_SCORES_URI"')[1].split("}")[0]
+        self.assertIn("var.scores_uri", block)
+        self.assertNotIn('"/scores"', block)
+        self.assertNotIn("/scores}", block)
+
+    def test_a_deploy_never_moves_traffic(self) -> None:
+        deploy = _read("deploy", "azure", "deploy_app.sh")
+        self.assertIn("--revision-suffix", deploy)
+        # Terraform creates the app with latestRevision:true, which would hand
+        # the new revision 100% the instant it exists. The live revision has to
+        # be pinned by name first, and the result verified rather than assumed.
+        self.assertIn("latestRevision", deploy)
+        self.assertIn("previous_revision", deploy)
+        pin = deploy.index("ingress traffic set")
+        create = deploy.index("--revision-suffix")
+        self.assertLess(pin, create)
+
+    def test_the_smoke_test_checks_the_new_revision_not_the_live_one(self) -> None:
+        smoke = _read("deploy", "azure", "smoke_test_app.sh")
+        self.assertIn("revision show", smoke)
+        self.assertIn("properties.fqdn", smoke)
+        self.assertIn("_stcore/health", smoke)
+
+    def test_the_smoke_test_enforces_the_access_decision(self) -> None:
+        """Public access was a deliberate choice, recorded in the Azure README.
+        Asserting it here means a later change to the access model has to change
+        the decision and the check together, instead of one drifting from the
+        other unnoticed."""
+        smoke = _read("deploy", "azure", "smoke_test_app.sh")
+        self.assertIn("README", smoke)
+        for status in ("302", "401", "403"):
+            self.assertIn(status, smoke)
+
+    def test_the_smoke_test_cannot_pass_a_control_it_could_not_read(self) -> None:
+        smoke = _read("deploy", "azure", "smoke_test_app.sh")
+        code = [
+            line
+            for line in smoke.splitlines()
+            if not line.lstrip().startswith("#")
+        ]
+        for laundered in ("|| echo 0", "|| true"):
+            self.assertFalse(
+                any(laundered in line for line in code),
+                f"a control that swallows its own failure into a pass: {laundered}",
+            )
+        # az role assignment list resolves a name through Graph, which the deploy
+        # identity deliberately cannot reach. The object id is passed directly.
+        self.assertIn("--assignee-object-id", smoke)
+
+    def test_both_environments_build_and_scan_the_page_image(self) -> None:
+        ci = _read(".github", "workflows", "azure-ci.yaml")
+        self.assertIn("--target app", ci)
+        self.assertIn("firmaware-app:ci", ci)
+        trivy = ci.split("firmaware-app:ci")[1]
+        self.assertIn("trivy", trivy.lower())
+
+    def test_prod_promotes_the_digest_dev_is_serving(self) -> None:
+        """Same rule as the model image: prod runs the bytes dev proved, not a
+        rebuild of the same commit. Read from the revision carrying traffic, not
+        from the app template -- those differ for the whole window between a
+        deploy and its promotion."""
+        prod = _read(".github", "workflows", "azure-deploy-prod.yaml")
+        self.assertIn("app_image_digest", prod)
+        self.assertIn("az acr import", prod)
+        block = prod.split("Resolve the page digest from dev")[1].split("- name:")[0]
+        self.assertIn("ingress.traffic", block)
+        self.assertIn("weight", block)
+
+    def test_dev_scales_to_zero_and_prod_does_not(self) -> None:
+        self.assertIn("app_min_replicas = 0", _read("infra", "azure", "envs", "dev.tfvars"))
+        self.assertIn("app_min_replicas = 1", _read("infra", "azure", "envs", "prod.tfvars"))
+
+    def test_the_app_survives_dev_having_no_vnet(self) -> None:
+        """dev runs network_isolation = false, so module.network has count 0 and
+        there is no subnet to hand over. The subnet has to be optional, and the
+        workload profile has to follow it: Container Apps requires a delegated
+        subnet for workload profiles and rejects one for Consumption-only."""
+        main = _read("infra", "azure", "main.tf")
+        block = main.split('module "app"')[1].split("\nmodule ")[0]
+        self.assertIn("var.network_isolation ?", block)
+        self.assertIn("null", block)
+
+        module = _read("infra", "azure", "modules", "app", "main.tf")
+        self.assertIn("dynamic \"workload_profile\"", module)
+
+    def test_the_page_ingress_refuses_plaintext(self) -> None:
+        module = _read("infra", "azure", "modules", "app", "main.tf")
+        self.assertIn("allow_insecure_connections = false", module)
+        self.assertIn("external_enabled = true", module)
 
 
 if __name__ == "__main__":

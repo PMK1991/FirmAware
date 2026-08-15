@@ -88,3 +88,32 @@ output "artifacts_uri" {
 output "scores_uri" {
   value = module.storage.scores_uri
 }
+
+output "scores_container_id" {
+  description = "Read by smoke_test_app.sh, which asserts the page's identity holds read and only read on this exact container."
+  value       = module.storage.container_ids["scores"]
+}
+
+# --- the hosted page ----------------------------------------------------------
+
+output "app_name" {
+  value = module.app.app_name
+}
+
+output "app_url" {
+  description = "Where the page is served. Printed by every deploy so a run log states what is live and where."
+  value       = module.app.url
+}
+
+output "app_fqdn" {
+  value = module.app.fqdn
+}
+
+output "app_identity_client_id" {
+  value = module.identity.app_identity_client_id
+}
+
+output "app_identity_principal_id" {
+  description = "Read by smoke_test_app.sh, which asserts this principal holds four read-only assignments and nothing that can write."
+  value       = module.identity.app_identity_principal_id
+}

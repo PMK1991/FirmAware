@@ -18,6 +18,9 @@ on:
       - "infra/azure/**"
       - "deploy/azure/**"
       - "src/**"
+      - "app.py"
+      - "demo/**"
+      - ".streamlit/**"
       - "pyproject.toml"
       - "Dockerfile"
       - ".github/workflows/azure-deploy-dev.yaml"
@@ -101,6 +104,12 @@ jobs:
       - name: Install az ml extension
         run: az extension add --name ml --yes --allow-preview false
 
+      # The page lives on Container Apps, which is a separate CLI extension from
+      # `ml`. Installed here rather than lazily on first use, because the lazy
+      # install prompts, and a prompt in CI is a hang rather than an error.
+      - name: Install az containerapp extension
+        run: az extension add --name containerapp --yes --allow-preview false
+
       - name: Resolve registry name
         id: registry
         run: |
@@ -114,6 +123,26 @@ jobs:
         env:
           AZURE_ACR_NAME: ${{ steps.registry.outputs.name }}
         run: bash deploy/azure/build.sh dev
+
+      # The page, from the same Dockerfile and the same build script, into its
+      # own repository so the two digests can never be confused for one another.
+      #
+      # Before Terraform, not after, and that ordering is load-bearing: the
+      # container app is digest-pinned, so `terraform plan` cannot describe it
+      # without knowing which digest. TF_VAR_app_image is how that reaches the
+      # plan and the apply alike.
+      - name: Build and push the page image
+        id: build_app
+        env:
+          AZURE_ACR_NAME: ${{ steps.registry.outputs.name }}
+          FIRMAWARE_IMAGE_REPOSITORY: firmaware-app
+          FIRMAWARE_IMAGE_TARGET: app
+          PIP_EXTRAS: app,azure
+        run: |
+          digest="$(bash deploy/azure/build.sh dev | sed -n 's/^image_digest=//p' | tail -1)"
+          [[ -n "${digest}" ]] || { echo "::error::the page build emitted no digest" >&2; exit 1; }
+          echo "TF_VAR_app_image=${digest}" >> "$GITHUB_ENV"
+          echo "page image: ${digest}"
 
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
@@ -152,7 +181,49 @@ jobs:
             echo "instance_type=$(terraform output -raw online_instance_type)"
             echo "endpoint_enabled=$(terraform output -raw online_endpoint_enabled)"
             echo "cicd_principal=$(terraform output -raw cicd_identity_principal_id)"
+            echo "app_url=$(terraform output -raw app_url)"
+            echo "app_client_id=$(terraform output -raw app_identity_client_id)"
+            echo "app_principal=$(terraform output -raw app_identity_principal_id)"
+            echo "scores_uri=$(terraform output -raw scores_uri)"
+            echo "scores_container_id=$(terraform output -raw scores_container_id)"
           } >> "$GITHUB_OUTPUT"
+
+      # --- the page -------------------------------------------------------------
+      # Independent of the model: it reads whatever the batch pipeline last
+      # published, so it neither waits for training nor blocks it. Placed here,
+      # before the long-running ML steps, so a page regression is reported in
+      # three minutes rather than twenty.
+
+      - name: Deploy the page into a new revision at 0% traffic
+        id: deploy_app
+        run: bash deploy/azure/deploy_app.sh dev "${{ env.TF_VAR_app_image }}"
+
+      # On the revision's own hostname, while the live one keeps serving. This is
+      # also where the public-access decision is actively checked rather than
+      # assumed -- see section [2] of the script.
+      - name: Smoke test the new revision
+        env:
+          FIRMAWARE_IMAGE_DIGEST: ${{ env.TF_VAR_app_image }}
+          FIRMAWARE_SCORES_URI: ${{ steps.tf.outputs.scores_uri }}
+          FIRMAWARE_APP_CLIENT_ID: ${{ steps.tf.outputs.app_client_id }}
+          FIRMAWARE_APP_PRINCIPAL_ID: ${{ steps.tf.outputs.app_principal }}
+          FIRMAWARE_SCORES_CONTAINER_ID: ${{ steps.tf.outputs.scores_container_id }}
+        run: bash deploy/azure/smoke_test_app.sh dev "${{ steps.deploy_app.outputs.revision }}"
+
+      - name: Promote the page
+        run: |
+          bash deploy/azure/promote_app.sh dev \
+            "${{ steps.deploy_app.outputs.revision }}" \
+            "${{ steps.deploy_app.outputs.previous_revision }}"
+
+      # The previous revision is still provisioned at 0%, so this is a traffic
+      # flip and not a redeploy. Guarded on the promotion having happened: before
+      # that point the new revision holds no traffic and there is nothing to undo.
+      - name: Roll the page back on failure
+        if: failure() && steps.deploy_app.outcome == 'success'
+        run: |
+          bash deploy/azure/rollback_app.sh dev \
+            "${{ steps.deploy_app.outputs.previous_revision }}"
 
       # After Terraform (the workspace must exist) and after the build (the
       # environment pins the image digest). Everything downstream refers to
@@ -293,4 +364,7 @@ jobs:
             echo "- image digest: \`${{ steps.build.outputs.image_digest }}\`"
             echo "- model version: \`${{ steps.model.outputs.version || 'n/a' }}\`"
             echo "- deployment slot: \`${{ steps.deploy.outputs.deployment || 'n/a' }}\`"
+            echo "- page image: \`${{ env.TF_VAR_app_image || 'n/a' }}\`"
+            echo "- page revision: \`${{ steps.deploy_app.outputs.revision || 'n/a' }}\`"
+            echo "- page url: ${{ steps.tf.outputs.app_url || 'n/a' }}"
           } >> "$GITHUB_STEP_SUMMARY"

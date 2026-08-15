@@ -70,6 +70,67 @@ COPY --chown=firmaware:firmaware config.yaml ./config.yaml
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "firmaware"]
 
+# Page stage, built for Azure Container Apps.
+#
+# Same base as everything else, so the page reads scores through exactly the
+# `firmaware.io` code the pipeline writes them with -- a divergence there would
+# show as a rendering bug rather than as a version mismatch.
+#
+# Built with `--build-arg PIP_EXTRAS=app,azure --target app`. Note `app,azure`
+# and NOT `train,azure`: the page never trains, never scores, and never loads a
+# model, so scikit-learn, xgboost and mlflow have no business being in an image
+# that is reachable from the internet. That is the whole reason `train` is an
+# extra rather than a base dependency.
+#
+# Placed BEFORE the azureml stage, not appended after it. `docker build` with no
+# --target builds the last stage in the file, so appending here would silently
+# retarget every untargeted build to the page image -- which is the exact defect
+# DockerfileTargetTests was written after. `azureml` stays last on purpose.
+FROM runtime AS app
+
+USER root
+
+# The same build-time guard the azureml stage uses, for the same reason: a
+# missing extra should fail here, in seconds, rather than as a container that
+# rolls out and then fails its readiness probe.
+#
+# Both halves matter. streamlit is the server; azure.identity is how the page
+# authenticates to ADLS, and without it `firmaware.io` raises ContractViolation
+# on the first abfss:// read -- which looks like a permissions problem.
+RUN python -c "import streamlit, azure.identity" \
+    || (echo "build this target with --build-arg PIP_EXTRAS=app,azure" >&2; exit 1)
+
+# app.py resolves DEMO_DIR relative to its own file, so demo/ has to sit beside
+# it. .streamlit/config.toml carries the theme, and Streamlit only reads it from
+# the working directory -- which is why WORKDIR /app is inherited, not restated.
+COPY --chown=firmaware:firmaware app.py ./app.py
+COPY --chown=firmaware:firmaware demo ./demo
+COPY --chown=firmaware:firmaware .streamlit ./.streamlit
+
+USER 10001:10001
+
+EXPOSE 8501
+
+# Reset the CLI entrypoint inherited from `runtime`, exactly as the azureml
+# stage does, so the CMD below is the whole command.
+ENTRYPOINT []
+
+# Only the flags that running as a container behind a proxy requires. The theme
+# and gatherUsageStats already live in .streamlit/config.toml and are
+# deliberately not repeated here: two places to change one setting is how the
+# hosted page and the Community Cloud page drift apart.
+#
+# enableXsrfProtection is Streamlit's default and is stated anyway, because this
+# is the deployment where it is load-bearing -- the page is served from a public
+# hostname with no login in front of it, so turning it off (a common reflex when
+# websockets misbehave behind a proxy) would leave the websocket handshake open
+# to any origin.
+CMD ["streamlit", "run", "app.py", \
+     "--server.port=8501", \
+     "--server.address=0.0.0.0", \
+     "--server.headless=true", \
+     "--server.enableXsrfProtection=true"]
+
 # Serving stage, built only for Azure ML managed online endpoints.
 #
 # It exists because AML does NOT override a custom image's entrypoint on an
