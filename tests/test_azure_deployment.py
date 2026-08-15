@@ -948,9 +948,19 @@ class DockerfileTargetTests(unittest.TestCase):
     """
 
     def test_the_last_stage_is_the_one_that_forced_this(self) -> None:
+        """`app` is last because ACR's classic builder builds every stage
+        preceding --target whether or not the target needs it, so `app` placed
+        earlier made `--target azureml --build-arg PIP_EXTRAS=train,azure` run
+        the page's streamlit guard and fail. Last, `--target azureml` stops
+        before it, and `--target app` builds `azureml` first with the `azure`
+        extra that satisfies its guard. Both orders were tried against a real
+        ACR build; only this one works."""
         stages = re.findall(r"^FROM\s+\S+\s+AS\s+(\S+)", _read("Dockerfile"), re.MULTILINE)
-        self.assertEqual(stages[-1], "azureml", "the default target changed; recheck every build")
+        self.assertEqual(stages[-1], "app", "the default target changed; recheck every build")
         self.assertIn("runtime", stages)
+        self.assertIn("azureml", stages)
+        # The order is load-bearing, so say why beside it rather than only here.
+        self.assertIn("Stage order here is FORCED", _read("Dockerfile"))
 
     def test_every_build_names_its_target(self) -> None:
         builds = {

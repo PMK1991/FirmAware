@@ -70,6 +70,38 @@ COPY --chown=firmaware:firmaware config.yaml ./config.yaml
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "firmaware"]
 
+# Serving stage, built only for Azure ML managed online endpoints.
+#
+# It exists because AML does NOT override a custom image's entrypoint on an
+# online deployment: it injects AZUREML_ENTRY_SCRIPT / AZUREML_MODEL_DIR, mounts
+# the code_configuration directory, then runs the image as-is and probes the
+# routes declared in the environment's inference_config. The `runtime` stage
+# above runs the CLI and exits, so a deployment built from it would crash-loop
+# and never pass a readiness probe.
+#
+# Kept as a separate target rather than changing `runtime` because GCP's Cloud
+# Run Jobs and this repo's own CLI both depend on that entrypoint. Same layers,
+# same packages, different final instruction.
+FROM runtime AS azureml
+
+USER root
+# The inference server is in the `azure` extra, so this stage is only coherent
+# when the image was built with it. Failing here, at build time, is far cheaper
+# than a deployment that rolls out and then fails its probe.
+RUN python -c "import azureml_inference_server_http" \
+    || (echo "build this target with --build-arg PIP_EXTRAS=train,azure" >&2; exit 1)
+USER 10001:10001
+
+# Reset so AML pipeline components, which pass an explicit `command:`, are not
+# appended as arguments to the CLI entrypoint inherited from `runtime`.
+ENTRYPOINT []
+
+# Shell form on purpose: the server needs $AZUREML_ENTRY_SCRIPT expanded at
+# runtime, and AML sets it only once the container starts. Port 5001 with
+# liveness `/` and scoring `/score` are azmlinfsrv's documented defaults and
+# must match inference_config in deploy/azure/azureml/environment.yaml.
+CMD ["sh", "-c", "azmlinfsrv --entry_script \"${AZUREML_ENTRY_SCRIPT:-/var/azureml-app/score.py}\" --port 5001"]
+
 # Page stage, built for Azure Container Apps.
 #
 # Same base as everything else, so the page reads scores through exactly the
@@ -82,12 +114,20 @@ ENTRYPOINT ["python", "-m", "firmaware"]
 # that is reachable from the internet. That is the whole reason `train` is an
 # extra rather than a base dependency.
 #
-# Placed BEFORE the azureml stage, not appended after it. `docker build` with no
-# --target builds the last stage in the file, so appending here would silently
-# retarget every untargeted build to the page image -- which is the exact defect
-# DockerfileTargetTests was written after. `azureml` stays last on purpose.
+# Stage order here is FORCED, not chosen. ACR Tasks build with the classic
+# builder, which builds every stage that precedes --target regardless of whether
+# the target depends on it. With `app` placed before `azureml`, a
+# `--target azureml --build-arg PIP_EXTRAS=train,azure` build ran this stage's
+# streamlit guard and died -- observed, not theorised.
+#
+# Last works in both directions: `--target azureml` stops before this stage, and
+# `--target app` builds `azureml` first, whose guard needs
+# azureml-inference-server-http, which lives in the `azure` extra that this
+# target also installs. The cost is that an untargeted `docker build` now yields
+# the page rather than the serving image, which is why
+# DockerfileTargetTests::test_every_build_names_its_target matters more than the
+# stage-order tripwire beside it: every build in this repository names a target.
 FROM runtime AS app
-
 USER root
 
 # The same build-time guard the azureml stage uses, for the same reason: a
@@ -130,35 +170,3 @@ CMD ["streamlit", "run", "app.py", \
      "--server.address=0.0.0.0", \
      "--server.headless=true", \
      "--server.enableXsrfProtection=true"]
-
-# Serving stage, built only for Azure ML managed online endpoints.
-#
-# It exists because AML does NOT override a custom image's entrypoint on an
-# online deployment: it injects AZUREML_ENTRY_SCRIPT / AZUREML_MODEL_DIR, mounts
-# the code_configuration directory, then runs the image as-is and probes the
-# routes declared in the environment's inference_config. The `runtime` stage
-# above runs the CLI and exits, so a deployment built from it would crash-loop
-# and never pass a readiness probe.
-#
-# Kept as a separate target rather than changing `runtime` because GCP's Cloud
-# Run Jobs and this repo's own CLI both depend on that entrypoint. Same layers,
-# same packages, different final instruction.
-FROM runtime AS azureml
-
-USER root
-# The inference server is in the `azure` extra, so this stage is only coherent
-# when the image was built with it. Failing here, at build time, is far cheaper
-# than a deployment that rolls out and then fails its probe.
-RUN python -c "import azureml_inference_server_http" \
-    || (echo "build this target with --build-arg PIP_EXTRAS=train,azure" >&2; exit 1)
-USER 10001:10001
-
-# Reset so AML pipeline components, which pass an explicit `command:`, are not
-# appended as arguments to the CLI entrypoint inherited from `runtime`.
-ENTRYPOINT []
-
-# Shell form on purpose: the server needs $AZUREML_ENTRY_SCRIPT expanded at
-# runtime, and AML sets it only once the container starts. Port 5001 with
-# liveness `/` and scoring `/score` are azmlinfsrv's documented defaults and
-# must match inference_config in deploy/azure/azureml/environment.yaml.
-CMD ["sh", "-c", "azmlinfsrv --entry_script \"${AZUREML_ENTRY_SCRIPT:-/var/azureml-app/score.py}\" --port 5001"]
