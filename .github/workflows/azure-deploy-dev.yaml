@@ -107,8 +107,13 @@ jobs:
       # The page lives on Container Apps, which is a separate CLI extension from
       # `ml`. Installed here rather than lazily on first use, because the lazy
       # install prompts, and a prompt in CI is a hang rather than an error.
+      # There is no stable containerapp extension -- every published version is
+      # flagged preview -- so `--allow-preview false` cannot install one. Pinned
+      # to an exact version rather than floating, because an unpinned preview
+      # extension is a moving dependency sitting in the release path, and this
+      # repository pins image digests for the same reason.
       - name: Install az containerapp extension
-        run: az extension add --name containerapp --yes --allow-preview false
+        run: az extension add --name containerapp --version 0.3.55 --allow-preview true --yes
 
       - name: Resolve registry name
         id: registry

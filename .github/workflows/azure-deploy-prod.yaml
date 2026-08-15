@@ -81,7 +81,7 @@ jobs:
         run: az extension add --name ml --yes --allow-preview false
 
       - name: Install az containerapp extension
-        run: az extension add --name containerapp --yes --allow-preview false
+        run: az extension add --name containerapp --version 0.3.55 --allow-preview true --yes
 
       # On a tag the digest is READ from dev; on a manual run it is SUPPLIED and
       # then checked against dev. Both paths end with a digest that dev is
@@ -260,8 +260,13 @@ jobs:
       - name: Install az ml extension
         run: az extension add --name ml --yes --allow-preview false
 
+      # There is no stable containerapp extension -- every published version is
+      # flagged preview -- so `--allow-preview false` cannot install one. Pinned
+      # to an exact version rather than floating, because an unpinned preview
+      # extension is a moving dependency sitting in the release path, and this
+      # repository pins image digests for the same reason.
       - name: Install az containerapp extension
-        run: az extension add --name containerapp --yes --allow-preview false
+        run: az extension add --name containerapp --version 0.3.55 --allow-preview true --yes
 
       - name: Import the approved digest into the prod registry
         id: image
