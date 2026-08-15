@@ -322,6 +322,21 @@ jobs:
           FIRMAWARE_IMAGE_DIGEST: ${{ steps.build.outputs.image_digest }}
         run: bash deploy/azure/deploy_batch.sh dev "${{ steps.model.outputs.version }}"
 
+      # Same five-minute assertion problem as the security gate below, reached a
+      # different way. The token minted at login covers ARM, so every step above
+      # keeps working from cache; this is the first step that asks for a storage
+      # audience, and acquiring one needs the assertion rather than the cache.
+      # The page steps at the top of this job added roughly ten minutes ahead of
+      # it, which is what pushed that request past the window and turned a
+      # working batch check into AADSTS700024.
+      - name: Refresh Azure login before the batch smoke test
+        if: steps.model.outputs.version != ''
+        uses: Azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       # The online smoke test cannot stand in for this. Batch runs a different
       # entry script on a different runtime, under a different identity, and
       # writes through a different storage path -- every batch defect this

@@ -1397,6 +1397,46 @@ class AppHostingTests(unittest.TestCase):
         self.assertIn("allow_insecure_connections = false", module)
         self.assertIn("external_enabled = true", module)
 
+    def test_rollback_resolves_latest_revision_instead_of_reading_it_as_nothing(
+        self,
+    ) -> None:
+        """Terraform creates the app routing to `latestRevision`, a traffic entry
+        that carries no revisionName. Treating that as "nothing is live" makes the
+        fallback pick the newest revision -- the one being rolled away from -- and
+        report success. This fired for real: a failed smoke test left the failing
+        revision serving 100% while the rollback step went green."""
+        rollback = _read("deploy", "azure", "rollback_app.sh")
+        self.assertIn("latestRevision", rollback)
+        self.assertIn("active[-1] if active else", rollback)
+        # The exclusion is what makes resolution matter; without it the fix is
+        # inert.
+        self.assertIn('grep -vx "${live:-__none__}"', rollback)
+
+    def test_the_secret_check_separates_absent_from_unreadable(self) -> None:
+        """An app with no secrets reports "secrets": null, and JMESPath length()
+        raises on null -- so the control failed on exactly the apps that should
+        pass. Absent is a genuine zero; unreadable must still fail."""
+        smoke = _read("deploy", "azure", "smoke_test_app.sh")
+        body = "\n".join(
+            line for line in smoke.splitlines() if not line.strip().startswith("#")
+        )
+        self.assertNotIn("length(properties.configuration.secrets)", body)
+        self.assertIn("properties.configuration", body)
+        # The positive form: pulling by identity, with no password reference.
+        self.assertIn("passwordSecretRef", body)
+
+    def test_the_batch_check_gets_a_fresh_assertion(self) -> None:
+        """GitHub's OIDC client assertion lasts five minutes. The ARM token minted
+        at login carries the steps above from cache, but the batch check is the
+        first to ask for a storage audience, and acquiring one needs the
+        assertion. The page steps added ~10 minutes ahead of it, which pushed that
+        request past the window."""
+        dev = _read(".github", "workflows", "azure-deploy-dev.yaml")
+        refresh = dev.index("Refresh Azure login before the batch smoke test")
+        batch = dev.index("- name: Batch smoke test")
+        self.assertLess(refresh, batch, "the refresh must precede the step needing it")
+        self.assertIn("--auth-mode login", _read("deploy", "azure", "batch_smoke_test.sh"))
+
 
 if __name__ == "__main__":
     unittest.main()

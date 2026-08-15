@@ -25,20 +25,35 @@ fi
 az_app() { az containerapp "$@" --name "${container_app}" --resource-group "${resource_group}"; }
 
 traffic="$(az_app show --query "properties.configuration.ingress.traffic" -o json)"
+
+# Oldest first. Active only, because a deactivated revision cannot take traffic
+# and routing to it would turn a rollback into an outage. Read once and reused
+# for both the `latestRevision` resolution and the fallback target.
+active="$(az_app revision list \
+  --query "sort_by([?properties.active], &properties.createdTime)[].name" -o tsv)"
+
 live="$(python3 -c '
 import json, sys
 entries = json.loads(sys.argv[1] or "[]") or []
+active = sys.argv[2].split()
 best = max(entries, key=lambda item: item.get("weight", 0), default=None)
-print("" if best is None else (best.get("revisionName") or ""))
-' "${traffic}")"
+name = "" if best is None else (best.get("revisionName") or "")
+# Terraform creates the app routing to `latestRevision` rather than to a name,
+# because on the first release there is no revision to name yet. That form
+# carries no revisionName, and reading it as "nothing is live" is not merely
+# wrong, it is backwards: the fallback below would then pick the newest
+# revision -- precisely the one a rollback is running away from -- flip 100% of
+# traffic onto it and report success. Resolving the flag to the newest revision
+# is what it actually means, so the exclusion downstream does its job.
+if not name and best is not None and best.get("latestRevision"):
+    name = active[-1] if active else ""
+print(name)
+' "${traffic}" "${active}")"
 
 if [[ -z "${target}" ]]; then
   # The most recently created active revision that is not the one currently
-  # serving. Active, because a deactivated revision cannot take traffic and
-  # routing to it would turn a rollback into an outage.
-  target="$(az_app revision list \
-    --query "sort_by([?properties.active], &properties.createdTime)[].name" -o tsv \
-    | grep -vx "${live:-__none__}" | tail -1 || true)"
+  # serving.
+  target="$(printf '%s\n' "${active}" | grep -vx "${live:-__none__}" | tail -1 || true)"
 fi
 
 [[ -n "${target}" ]] || { echo "no revision to roll back to: ${live:-nothing} is the only active one" >&2; exit 1; }
