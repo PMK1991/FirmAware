@@ -4,6 +4,9 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+.ipynb_checkpoints/
+# Local secrets, e.g. the ANTHROPIC_API_KEY the RAG notebook reads.
+.env
 # Source documents as originally dropped into the repo root. The organized,
 # reviewable copies live under docs/design/ and docs/architecture/; these are
 # byte-identical originals kept locally so the root stays clean.
@@ -15,6 +18,7 @@ FirmAware_Azure_ML_Architecture.drawio
 notebook_runs/
 .terraform/
 *.tfplan
+tfplan
 *.tfstate
 *.tfstate.*
 .terraform.tfstate.lock.info
@@ -27,5 +31,8 @@ mlruns/
 /artifacts/*
 /outputs/*
 !/data/.gitkeep
+# The evidence corpus is synthetic and small, and CI asserts the chunker's
+# invariants over it, so unlike the deployment records it is versioned.
+!/data/corpus/
 !/artifacts/.gitkeep
 !/outputs/.gitkeep

@@ -100,6 +100,16 @@ output "app_name" {
   value = module.app.app_name
 }
 
+output "foundry_endpoint" {
+  description = "OpenAI-compatible base URL for the evidence layer's models; Entra ID only."
+  value       = module.evidence.foundry_endpoint
+}
+
+output "search_endpoint" {
+  description = "Azure AI Search holding the corpus index behind the firmaware-corpus alias; Entra ID only."
+  value       = module.evidence.search_endpoint
+}
+
 output "app_url" {
   description = "Where the page is served. Printed by every deploy so a run log states what is live and where."
   value       = module.app.url

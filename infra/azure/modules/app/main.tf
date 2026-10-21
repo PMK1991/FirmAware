@@ -168,6 +168,18 @@ resource "azurerm_container_app" "this" {
         value = var.app_identity_client_id
       }
 
+      # Endpoints and deployment names for the evidence layer, never keys:
+      # both services are Entra-only and reached with the identity above. With
+      # these set, app.py serves the "Historical Evidence" section from Azure AI
+      # Search and Foundry; with the map empty the page renders without it.
+      dynamic "env" {
+        for_each = var.evidence_env
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+
       # Streamlit's own health endpoint, not `/`.
       #
       # `/` returns Streamlit's bootstrap HTML before the app script has run, so

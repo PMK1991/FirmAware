@@ -1438,5 +1438,61 @@ class AppHostingTests(unittest.TestCase):
         self.assertIn("--auth-mode login", _read("deploy", "azure", "batch_smoke_test.sh"))
 
 
+class EvidenceLayerTests(unittest.TestCase):
+    """The page now reads a Search index and calls Foundry models. These pin the
+    properties that keep that from widening what an internet-facing container
+    can do."""
+
+    def test_both_services_are_keyless(self) -> None:
+        module = _read("infra", "azure", "modules", "evidence", "main.tf")
+        self.assertRegex(module, r"local_auth_enabled\s+=\s+false")
+        self.assertRegex(module, r"local_authentication_enabled\s+=\s+false")
+        app = _read("infra", "azure", "modules", "app", "main.tf")
+        self.assertNotIn("secret {", app)
+
+    def test_the_page_gets_reader_roles_on_the_evidence_and_nothing_more(self) -> None:
+        module = _read("infra", "azure", "modules", "evidence", "main.tf")
+        roles = re.findall(r'role_definition_name\s+=\s+"([^"]+)"', module)
+        self.assertEqual(sorted(roles), ["Cognitive Services User", "Search Index Data Reader"])
+        for block in module.split('resource "azurerm_role_assignment"')[1:]:
+            self.assertIn("var.app_principal_id", block.split("\n}")[0])
+
+    def test_the_smoke_test_expects_exactly_the_granted_roles(self) -> None:
+        smoke = _read("deploy", "azure", "smoke_test_app.sh")
+        expected = smoke.split("expected = sorted(")[1].split("\n)")[0]
+        for role in ("Storage Blob Data Reader", "AcrPull", "Search Index Data Reader",
+                     "Cognitive Services User"):
+            self.assertIn(role, expected)
+        self.assertIn("Search Index Data Contributor", smoke)  # named as forbidden
+        self.assertIn("FIRMAWARE_SEARCH_ENDPOINT", smoke)
+
+    def test_the_page_image_carries_the_manifest_and_no_corpus_document(self) -> None:
+        stage = _read("Dockerfile").split("FROM runtime AS app")[1]
+        copies = [line for line in stage.splitlines() if line.startswith("COPY") and "data/" in line]
+        self.assertEqual(len(copies), 1)
+        self.assertIn("data/corpus/manifest.json", copies[0])
+        ignore = _read(".dockerignore").splitlines()
+        self.assertIn("data/corpus/*", ignore)
+        self.assertIn("!data/corpus/manifest.json", ignore)
+        self.assertNotIn("!data/corpus/*", ignore)
+        self.assertIn(".env", ignore)
+        self.assertIn("data/corpus/manifest.json", _read("deploy", "azure", "build.sh"))
+
+    def test_the_page_is_handed_endpoints_never_credentials(self) -> None:
+        variables = _read("infra", "azure", "modules", "app", "variables.tf")
+        self.assertIn('startswith(name, "FIRMAWARE_")', variables)
+        main = _read("infra", "azure", "main.tf")
+        block = main.split("evidence_env = {")[1].split("}")[0]
+        self.assertIn("module.evidence.search_endpoint", block)
+        self.assertNotRegex(block.upper(), r"KEY\s*=")
+
+    def test_adoption_of_the_hand_made_dev_resources_is_dev_only(self) -> None:
+        imports = _read("infra", "azure", "evidence_imports.tf")
+        self.assertIn('var.env == "dev"', imports)
+        self.assertEqual(imports.count("import {"), 3)
+        self.assertIn('search_sku = "free"', _read("infra", "azure", "envs", "dev.tfvars"))
+        self.assertNotIn("search_sku", _read("infra", "azure", "envs", "prod.tfvars"))
+
+
 if __name__ == "__main__":
     unittest.main()

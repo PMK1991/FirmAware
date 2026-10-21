@@ -147,6 +147,12 @@ COPY --chown=firmaware:firmaware app.py ./app.py
 COPY --chown=firmaware:firmaware demo ./demo
 COPY --chown=firmaware:firmaware .streamlit ./.streamlit
 
+# The evidence layer needs the corpus manifest and nothing else from the corpus:
+# routing reads document metadata from it, while every chunk's text and vector
+# is served by Azure AI Search. app.py looks for it beside itself, in
+# data/corpus/, and renders without the evidence section when it is absent.
+COPY --chown=firmaware:firmaware data/corpus/manifest.json ./data/corpus/manifest.json
+
 USER 10001:10001
 
 EXPOSE 8501

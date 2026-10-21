@@ -21,6 +21,7 @@ on:
       - "app.py"
       - "demo/**"
       - ".streamlit/**"
+      - "data/corpus/manifest.json"
       - "pyproject.toml"
       - "Dockerfile"
       - ".github/workflows/azure-deploy-dev.yaml"

@@ -299,3 +299,34 @@ variable "app_max_replicas" {
   type    = number
   default = 3
 }
+
+variable "search_sku" {
+  type        = string
+  default     = "basic"
+  description = "Azure AI Search tier for the corpus index. dev runs free: one per subscription, 50 MB, no SLA, which 377 chunks fit many times over."
+}
+
+variable "foundry_models" {
+  description = "Foundry Global Standard deployments for the evidence layer, keyed by model name. Each needs quota in the subscription."
+  type = map(object({
+    format   = string
+    version  = string
+    capacity = number
+  }))
+  default = {
+    "Llama-3.3-70B-Instruct" = { format = "Meta", version = "9", capacity = 20 }
+    "text-embedding-3-small" = { format = "OpenAI", version = "1", capacity = 100 }
+  }
+}
+
+variable "evidence_writer_model" {
+  type        = string
+  default     = "Llama-3.3-70B-Instruct"
+  description = "The deployment that writes explanations; must be a key of foundry_models."
+}
+
+variable "evidence_embedding_model" {
+  type        = string
+  default     = "text-embedding-3-small"
+  description = "The deployment that embeds the corpus and queries; must match the one the live index was built with."
+}

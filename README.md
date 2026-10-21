@@ -609,6 +609,28 @@ a sidebar selector exposes the earlier immutable objects. Flags the model
 consumes are labeled separately from operator context that only annotates a
 deployment.
 
+### Historical evidence in the inspector (local)
+
+Where the evidence layer can run, the Deployment Inspector adds a "Historical
+Evidence — RAG" section under the flag panel. It needs the corpus in
+`data/corpus/` plus the `rag` and `notebooks` extras. "Explain with historical
+evidence" routes the deployment through `firmaware.rag`: failure history,
+version-transition summaries, rollback runbooks, policy and risk matrices. It
+gates the result, shows the verdict and evidence cards, and writes a grounded
+explanation from an open model on Azure AI Foundry (Llama-3.3-70B-Instruct, called keylessly with your `az login`) when `FIRMAWARE_FOUNDRY_ENDPOINT` and `FIRMAWARE_FOUNDRY_DEPLOYMENT` are set in a gitignored `.env`; Claude is the fallback when only `ANTHROPIC_API_KEY` is set. The Foundry path needs the `azure` extra for `azure-identity`.
+
+An out-of-corpus vendor is refused rather than explained from other vendors'
+documents. The hosted pages install only the `app` extra and ship no corpus, so
+they render without the section. Locally, `predict` appends every run to one
+`outputs/scores.csv`; when that file holds several runs, the page shows the
+newest.
+
+```powershell
+python -m pip install -e ".[app,rag,notebooks]"
+python -m firmaware predict
+streamlit run app.py
+```
+
 ### Reading Azure results from the page
 
 The page resolves its sources through the same environment contract as the

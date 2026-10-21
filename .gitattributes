@@ -5,3 +5,6 @@ Dockerfile text eol=lf
 *.tfvars text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
+# The manifest pins each document's sha256, so checkout must not rewrite line
+# endings: byte-identical is the contract.
+data/corpus/** -text

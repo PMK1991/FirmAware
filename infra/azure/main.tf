@@ -188,6 +188,19 @@ module "monitoring" {
 # The page. Last, because it consumes the storage URIs, the registry and the
 # identity that the modules above create, and because nothing else depends on it
 # -- the pipeline runs whether or not anyone is looking at it.
+module "evidence" {
+  source = "./modules/evidence"
+
+  name_prefix         = local.name_prefix
+  location            = var.location
+  resource_group_name = module.foundation.resource_group_name
+  unique_suffix       = var.unique_suffix
+  tags                = local.tags
+  app_principal_id    = module.identity.app_identity_principal_id
+  search_sku          = var.search_sku
+  models              = var.foundry_models
+}
+
 module "app" {
   source = "./modules/app"
 
@@ -216,10 +229,21 @@ module "app" {
   max_replicas   = var.app_max_replicas
   zone_redundant = var.env == "prod" && var.network_isolation
 
+  # The evidence layer's endpoints, from the module that created them. The
+  # index is the alias `python -m firmaware.rag index` repoints, so promoting a
+  # new corpus index needs no redeploy of the page.
+  evidence_env = {
+    FIRMAWARE_SEARCH_ENDPOINT              = module.evidence.search_endpoint
+    FIRMAWARE_SEARCH_INDEX                 = "firmaware-corpus"
+    FIRMAWARE_FOUNDRY_ENDPOINT             = module.evidence.foundry_endpoint
+    FIRMAWARE_FOUNDRY_DEPLOYMENT           = var.evidence_writer_model
+    FIRMAWARE_FOUNDRY_EMBEDDING_DEPLOYMENT = var.evidence_embedding_model
+  }
+
   # The identity's read grants must exist before a replica starts, or the first
   # page load fails on authorization and the revision looks broken. Same
   # propagation problem the workspace has, and the same sleep answers it.
-  depends_on = [time_sleep.role_propagation]
+  depends_on = [time_sleep.role_propagation, module.evidence]
 }
 
 module "policy" {

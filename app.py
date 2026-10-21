@@ -18,6 +18,8 @@ back to the small committed fixtures in demo/ so a fresh clone renders.
 
 from __future__ import annotations
 
+import html
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -73,6 +75,50 @@ UPCOMING_URI = resolve_uri(
     join_uri(DATA_URI, "upcoming_deployments.csv"),
     "upcoming_deployments.csv",
 )
+# The evidence layer appears only where it can run: the corpus checked out, and
+# the notebook and rag extras installed (BGE embeddings pull in torch, PDFs need
+# pdfplumber). The hosted pages install only the app extra and ship no corpus,
+# so there the page renders exactly as it did before the layer existed.
+CORPUS_DIR = Path(
+    os.getenv("FIRMAWARE_CORPUS_DIR", Path(__file__).resolve().parent / "data" / "corpus")
+)
+
+# A local .env configures the evidence layer's endpoints, and it has to be read
+# before rag_available() decides which backend exists. Hosted pages carry the
+# same settings as container environment variables and have no python-dotenv;
+# override=False keeps a real environment variable ahead of the file.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
+except ImportError:
+    pass
+
+
+def search_configured() -> bool:
+    return all(
+        os.getenv(name)
+        for name in ("FIRMAWARE_SEARCH_ENDPOINT", "FIRMAWARE_FOUNDRY_ENDPOINT",
+                     "FIRMAWARE_FOUNDRY_EMBEDDING_DEPLOYMENT")
+    )
+
+
+def rag_available() -> bool:
+    """Either backend, with the manifest the routes read document metadata from.
+
+    With Azure AI Search configured the page needs only manifest.json: chunks,
+    vectors and text live in the index, so there is no PDF parsing and no torch,
+    which is what lets it run in a 2 GiB container. Otherwise it builds the local
+    BGE index from the corpus itself.
+    """
+    if not (CORPUS_DIR / "manifest.json").is_file():
+        return False
+    if search_configured():
+        return importlib.util.find_spec("azure.identity") is not None
+    return (
+        importlib.util.find_spec("sentence_transformers") is not None
+        and importlib.util.find_spec("pdfplumber") is not None
+    )
 
 st.set_page_config(
     page_title="FirmAware",
@@ -296,6 +342,25 @@ div[data-baseweb="select"] > div {{ background: {BG_PANEL}; border-color: {LINE}
     color: {AMBER};
     background: rgba(255,176,32,0.08);
 }}
+
+.fa-evidence {{
+    background: {BG_PANEL};
+    border: 1px solid {LINE};
+    border-left: 3px solid var(--route-color, {LINE});
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+}}
+.fa-evidence-head {{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.6px;
+    color: {INK_MUTED};
+    margin-bottom: 6px;
+}}
+.fa-evidence-head b {{ color: {INK}; }}
+.fa-match {{ float: right; color: {INK_MUTED}; }}
+.fa-evidence-text {{ font-size: 13px; color: {INK}; line-height: 1.45; }}
 </style>
 """,
     unsafe_allow_html=True,
@@ -461,6 +526,204 @@ def stop_with_message(message: str) -> None:
     st.stop()
 
 
+VERDICT_STYLE = {
+    "concern_found": (
+        RED, "Concern found",
+        "The historical evidence discusses the flags this deployment raises.",
+    ),
+    "no_flag_evidence": (
+        INK_MUTED, "No flag evidence",
+        (
+            "This deployment raises none of the flags the evidence discusses, so the "
+            "evidence cannot account for the model score."
+        ),
+    ),
+    "low_confidence": (
+        AMBER, "Low confidence",
+        "The evidence is too thin to support an explanation, so none was generated.",
+    ),
+    "insufficient_evidence": (
+        AMBER, "Insufficient evidence",
+        (
+            "The corpus has nothing on this vendor. Documents about other vendors do "
+            "not apply, so no explanation was generated."
+        ),
+    ),
+}
+ROUTE_STYLE = {
+    "evidence": ("Failure history", RED),
+    "transition": ("Version transition", AMBER),
+    "cross_vendor": ("Cross-vendor cascade", AMBER),
+    "runbook": ("Rollback runbook", GREEN),
+    "policy": ("Deployment policy", INK_MUTED),
+    "matrix": ("Risk matrix", INK_MUTED),
+}
+
+
+# Loaded on the first "Explain" click, never on page load. With Azure AI Search
+# that is a client and a token; locally it is embedding the corpus with BGE,
+# about a minute and a gigabyte, which a reader browsing scores should not pay
+# for.
+@st.cache_resource(show_spinner=False)
+def load_evidence_index(corpus_dir: str):
+    from firmaware.rag.azure_search import backend_from_env
+    from firmaware.rag.corpus import load_manifest
+
+    records = load_manifest(Path(corpus_dir))["documents"]
+    backend = backend_from_env()
+    if backend is not None:
+        return records, backend
+    from firmaware.rag.chunker import chunk_corpus
+    from firmaware.rag.retrieval import LocalIndex, bge_embedder
+
+    return records, LocalIndex(chunk_corpus(Path(corpus_dir)), bge_embedder())
+
+
+@st.cache_resource(show_spinner=False)
+def load_generator():
+    """What .env configures (a Foundry model, else Claude); None retrieves without one."""
+    from firmaware.rag.generate import generator_from_env
+
+    return generator_from_env()
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def load_evidence_flags(upcoming_uri: str) -> pd.DataFrame:
+    """Flags in the corpus's own definitions, which differ from FLAG_LABELS on three."""
+    from firmaware.rag.flags import deployment_flags
+
+    return deployment_flags(read_csv(upcoming_uri))
+
+
+def one_line_html(parts: list[str]) -> str:
+    """HTML for st.markdown as a single line.
+
+    Markdown still parses around raw HTML: a blank line ends the HTML block, and
+    a line indented four spaces after it becomes a code block, so the tags of a
+    multi-line f-string can show on the page as literal text.
+    """
+    return "".join(parts)
+
+
+def text_as_html(text: str) -> str:
+    """Escape corpus text and keep its line breaks without a single newline,
+    because a blank line inside a chunk would end the HTML block mid-card."""
+    return "<br>".join(html.escape(line) for line in text.splitlines())
+
+
+def render_evidence_section(selected_id: str, row: pd.Series, run_key: str) -> None:
+    from firmaware.rag.explain import explain
+
+    st.markdown(
+        '<div class="fa-section">Historical Evidence — RAG</div>', unsafe_allow_html=True
+    )
+    try:
+        evidence_flags = load_evidence_flags(UPCOMING_URI)
+    except Exception as error:  # noqa: BLE001 - surfaced verbatim to the operator
+        st.caption(f"Evidence unavailable: {error}")
+        return
+    if selected_id not in evidence_flags.index:
+        st.caption(f"{selected_id} is not in the scoring input, so there is nothing to search.")
+        return
+
+    query_row = evidence_flags.loc[selected_id].copy()
+    for column in ("risk_probability", "risk_prediction", "risk_band"):
+        query_row[column] = row.get(column)
+    generator = load_generator()
+    key = f"evidence|{run_key}|{selected_id}"
+
+    if st.button("Explain with historical evidence", type="primary", key=f"explain|{selected_id}"):
+        with st.spinner("Searching the historical evidence…"):
+            records, index = load_evidence_index(str(CORPUS_DIR))
+            st.session_state[key] = explain(query_row, records, index, generator)
+
+    result = st.session_state.get(key)
+    if result is None:
+        st.caption(
+            "Retrieves failure history, transition summaries, runbooks and policy "
+            "from the historical corpus, gates it, then "
+            + (f"writes a grounded explanation with `{generator.name}`." if generator
+               else "stops: generation is off until a model is configured in .env.")
+        )
+        return
+
+    assessment = result.assessment
+    color, label, meaning = VERDICT_STYLE[assessment.verdict]
+    reasons = "; ".join(assessment.reasons)
+    searched = ", ".join(query_row["active_flags"]) or "none"
+    panel = [
+        '<div class="fa-panel">',
+        '<div class="fa-panel-label">Evidence verdict</div>',
+        f'<div class="fa-readout-value" style="font-size:22px; color:{color};">{label}</div>',
+        f'<div class="fa-field" style="margin-top:8px;">{meaning}</div>',
+    ]
+    if reasons:
+        panel.append(f'<div class="fa-field"><b>Why</b> {html.escape(reasons)}</div>')
+    if assessment.matched:
+        panel.append(
+            f'<div class="fa-field"><b>Evidence</b> {assessment.matched} vendor-matched '
+            f"chunks from {assessment.documents} document(s)</div>"
+        )
+    panel += [
+        f'<div class="fa-field"><b>Flags searched</b> {html.escape(searched)}</div>',
+        "</div>",
+    ]
+    st.markdown(one_line_html(panel), unsafe_allow_html=True)
+    st.caption(
+        "Flags searched use the definitions the corpus was written with, which differ "
+        "from the Risk Flag Panel above on repeat failures (≥ 3), network stress "
+        "(≥ 0.65) and major version jumps (upgrades only)."
+    )
+
+    if result.generated_by:
+        st.markdown(
+            '<div class="fa-section">Risk Explanation — '
+            f"{html.escape(result.generated_by)}</div>",
+            unsafe_allow_html=True,
+        )
+        with st.container(border=True):
+            st.markdown(result.text)
+        checks = result.checks
+        if checks:
+            st.caption(
+                f"Grounding checks: citations {'✓' if checks['citations_ok'] else '✗'} · "
+                f"numbers {'✓' if checks['numbers_ok'] else '✗ ' + str(checks['stray_numbers'])} · "
+                f"flags {'✓' if checks['flags_ok'] else '✗ ' + str(checks['borrowed_flags'])}"
+            )
+    elif result.error:
+        st.error(f"The explanation could not be generated. {result.error}")
+    elif result.text:
+        st.info(result.text)
+    else:
+        st.caption("Generation is off: configure a model in .env (FIRMAWARE_FOUNDRY_ENDPOINT and FIRMAWARE_FOUNDRY_DEPLOYMENT) to explain.")
+
+    for route, hits in result.routes.items():
+        if not hits:
+            continue
+        route_label, route_color = ROUTE_STYLE[route]
+        st.markdown(f'<div class="fa-section">{route_label}</div>', unsafe_allow_html=True)
+        for hit in hits:
+            chunk = hit.chunk
+            text = chunk["text"]
+            excerpt = text[:600] + ("…" if len(text) > 600 else "")
+            score = f"{hit.score:.0%} match" if route in {"evidence", "transition", "cross_vendor"} else "lookup"
+            st.markdown(
+                one_line_html(
+                    [
+                        f'<div class="fa-evidence" style="--route-color:{route_color};">',
+                        (
+                            f'<div class="fa-evidence-head"><b>{chunk["doc_id"]}</b> · '
+                            f'{chunk["document_type"]} · {chunk["chunk_kind"]}'
+                            f'<span class="fa-match">{score}</span></div>'
+                        ),
+                        f'<div class="fa-evidence-text">{text_as_html(excerpt)}</div>',
+                        "</div>",
+                    ]
+                ),
+                unsafe_allow_html=True,
+            )
+
+
 try:
     score_runs = load_score_runs(SCORES_URI)
 except Exception as error:  # noqa: BLE001 - surfaced verbatim to the operator
@@ -488,6 +751,17 @@ except Exception as error:  # noqa: BLE001
 
 if scores.empty:
     stop_with_message(f"{selected_run} contains no rows.")
+
+# Remote stores write one object per run, but local `predict` appends every run
+# to the same CSV. Mixed runs would put two scores on one deployment and let the
+# inspector show whichever came first, so a multi-run file shows its newest run.
+if "scored_at" in scores.columns and scores["scored_at"].nunique() > 1:
+    newest_run = str(scores["scored_at"].max())
+    st.sidebar.caption(
+        f"{scores['scored_at'].nunique()} runs are appended in this file; "
+        f"showing the newest, scored {newest_run[:19]}."
+    )
+    scores = scores[scores["scored_at"].astype(str) == newest_run]
 
 try:
     features = load_features(UPCOMING_URI)
@@ -866,3 +1140,6 @@ else:
         + ". The remaining flags are operator context read from the scoring input; "
         "they are not separate model inputs."
     )
+
+    if rag_available():
+        render_evidence_section(selected_id, row, f"{selected_run}|{scored_at}")
