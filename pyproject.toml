@@ -45,6 +45,11 @@ train = [
   # the log_model(artifact_path=...) idiom that MLflow 3 deprecates, so nothing
   # here depends on a 3.x API.
   "mlflow==2.22.5",
+  # A ceiling MLflow 2 never declared. SQLAlchemy 2.1 removed
+  # FallbackAsyncAdaptedQueuePool, which mlflow.store.db imports at load, so
+  # every tracking call against a sqlite store dies on an ImportError. MLflow
+  # caps only at <3, and a fresh resolve took 2.1. Lifts with the MLflow pin.
+  "sqlalchemy>=2,<2.1",
 ]
 app = [
   "streamlit==1.51.0",
@@ -84,6 +89,10 @@ azure = [
   # and 50, so a floor makes the set unsolvable rather than secure. It is
   # recorded in .trivyignore with the rest of the pin's consequences.
   "msgpack>=1.2.1",
+  # Same kind of floor, added when trivy flagged urllib3 2.7.0 for two HIGHs
+  # (an HTTPS-proxy TLS override and an unbounded chunk parser) fixed in 2.8.0.
+  # Every outbound call here goes through it, via requests and the Azure SDKs.
+  "urllib3>=2.8.0",
 ]
 dev = [
   "pytest>=8.0,<9",

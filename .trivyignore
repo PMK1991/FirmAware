@@ -79,6 +79,15 @@ CVE-2026-4035
 # The named fix, 3.14.0, is on the far side of the MLflow 2 pin above.
 CVE-2026-8147
 
+# --- mlflow 2.22.5: pickle-deserialization guard bypass -----------------------
+# Added 2026-10-21. MLFLOW_ALLOW_PICKLE_DESERIALIZATION=False is not honoured by
+# the mlflow.statsmodels flavor, so loading a crafted statsmodels model runs
+# code. This image never imports that flavor: it loads only the pyfunc this
+# project trained and registered itself, from its own registry, and that model
+# is pickled by design, so the guard was never what protected it -- the RBAC on
+# who can register a model is. The fix, 3.15.0, is past the MLflow 2 pin.
+GHSA-gqvg-gmmx-x4hm
+
 # --- mlflow 2.22.5: insecure temporary directory ------------------------------
 # The one client-side item. It needs a local attacker already executing code
 # inside the container to win a race in /tmp. The container is single-purpose,
