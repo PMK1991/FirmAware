@@ -52,7 +52,9 @@ train = [
   "sqlalchemy>=2,<2.1",
 ]
 app = [
-  "streamlit==1.51.0",
+  # 1.66.1 is the first release that allows Pillow 13; every earlier one caps
+  # it below, and Pillow 12 carries a CRITICAL that blocks the page image.
+  "streamlit==1.66.1",
   "plotly==6.4.0",
 ]
 # Azure's storage SDK is optional for the same reason google-cloud-storage is
