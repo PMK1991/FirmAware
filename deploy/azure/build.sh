@@ -52,7 +52,7 @@ fi
 # missing from the content hash, two different pages share one tag.
 build_inputs=(Dockerfile pyproject.toml README.md config.yaml src)
 if [[ "${target}" == "app" ]]; then
-  build_inputs+=(app.py demo .streamlit)
+  build_inputs+=(app.py demo .streamlit data/corpus/manifest.json)
 fi
 
 # Hashes exactly what the Dockerfile copies, so the tag changes if and only if

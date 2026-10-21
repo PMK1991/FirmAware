@@ -167,6 +167,46 @@ class AppTests(unittest.TestCase):
         """Select widgets by label; index shifts once the run selector appears."""
         return next(widget for widget in page.selectbox if widget.label == label)
 
+    def test_a_file_with_appended_runs_shows_only_the_newest(self) -> None:
+        """Local `predict` appends each run to one CSV; mixing them would put
+        two scores on every deployment and show whichever came first."""
+        with tempfile.TemporaryDirectory() as directory:
+            environment = build_fixture(Path(directory))
+            scores_path = Path(environment["FIRMAWARE_SCORES_URI"])
+            first = pd.read_csv(scores_path)
+            newer = first.assign(
+                risk_probability=0.99,
+                risk_prediction="NO_GO",
+                risk_band="HIGH",
+                scored_at="2026-10-21T00:00:00.000001Z",
+            )
+            pd.concat([first, newer]).to_csv(scores_path, index=False)
+
+            page = self.start(environment)
+            page.radio[0].set_value("Fleet Overview").run()
+            self.assertEqual(page.exception, [])
+            register = page.dataframe[0].value
+            self.assertEqual(len(register), 12)
+            self.assertTrue(register.astype(str).apply(lambda c: c.str.contains("NO_GO")).any(axis=None))
+            self.assertFalse(register.astype(str).apply(lambda c: c.str.fullmatch("GO")).any(axis=None))
+
+    def test_without_the_evidence_layer_the_inspector_is_unchanged(self) -> None:
+        """The hosted pages ship no corpus and no torch: no RAG section, no button."""
+        with tempfile.TemporaryDirectory() as directory:
+            environment = build_fixture(Path(directory))
+            environment["FIRMAWARE_CORPUS_DIR"] = str(Path(directory) / "no-corpus")
+            page = self.start(environment)
+            deployment = next(
+                option
+                for option in self.picker(page, "Select a deployment").options
+                if str(option).startswith("deployment-")
+            )
+            self.picker(page, "Select a deployment").set_value(deployment).run()
+            self.assertEqual(page.exception, [])
+            rendered = " ".join(str(block.value) for block in page.markdown)
+            self.assertNotIn("Historical Evidence", rendered)
+            self.assertEqual([b for b in page.button if "evidence" in b.label.lower()], [])
+
     def test_both_views_render_every_scored_deployment(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             page = self.start(build_fixture(Path(directory)))

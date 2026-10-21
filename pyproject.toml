@@ -45,9 +45,16 @@ train = [
   # the log_model(artifact_path=...) idiom that MLflow 3 deprecates, so nothing
   # here depends on a 3.x API.
   "mlflow==2.22.5",
+  # A ceiling MLflow 2 never declared. SQLAlchemy 2.1 removed
+  # FallbackAsyncAdaptedQueuePool, which mlflow.store.db imports at load, so
+  # every tracking call against a sqlite store dies on an ImportError. MLflow
+  # caps only at <3, and a fresh resolve took 2.1. Lifts with the MLflow pin.
+  "sqlalchemy>=2,<2.1",
 ]
 app = [
-  "streamlit==1.51.0",
+  # 1.66.1 is the first release that allows Pillow 13; every earlier one caps
+  # it below, and Pillow 12 carries a CRITICAL that blocks the page image.
+  "streamlit==1.66.1",
   "plotly==6.4.0",
 ]
 # Azure's storage SDK is optional for the same reason google-cloud-storage is
@@ -84,6 +91,10 @@ azure = [
   # and 50, so a floor makes the set unsolvable rather than secure. It is
   # recorded in .trivyignore with the rest of the pin's consequences.
   "msgpack>=1.2.1",
+  # Same kind of floor, added when trivy flagged urllib3 2.7.0 for two HIGHs
+  # (an HTTPS-proxy TLS override and an unbounded chunk parser) fixed in 2.8.0.
+  # Every outbound call here goes through it, via requests and the Azure SDKs.
+  "urllib3>=2.8.0",
 ]
 dev = [
   "pytest>=8.0,<9",
@@ -92,12 +103,27 @@ dev = [
   # local never ran. Bump deliberately, with the resulting fixes in the same change.
   "ruff==0.16.1",
 ]
+# The evidence layer's offline half: parsing, chunking and eval over the
+# committed corpus. Only PDFs need a parser, and the corpus keeps its 14 PDFs
+# as PDFs on purpose -- the structural loss they suffer is a case the chunker
+# must detect, not one to convert away. Pinned exactly because chunk counts are
+# asserted against a baseline, and a parser upgrade that reflows text would move
+# them without any document changing.
+rag = [
+  "pdfplumber==0.11.10",
+]
 notebooks = [
   "ipykernel>=6.29,<7",
   "jupyterlab>=4.3,<5",
   "matplotlib>=3.9,<4",
   "nbclient>=0.10,<1",
   "seaborn>=0.13,<1",
+  # The local RAG notebook's embedder and generator, the lecture precedent.
+  # Here and not in "rag": three CI workflows install "rag", and
+  # sentence-transformers would pull torch into every one of them.
+  "sentence-transformers>=6.1,<7",
+  "anthropic>=1.8,<2",
+  "python-dotenv>=1,<2",
 ]
 
 [tool.setuptools.packages.find]

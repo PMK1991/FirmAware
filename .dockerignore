@@ -7,7 +7,14 @@ __pycache__
 .venv
 gha-creds-*.json
 artifacts
-data
+# Everything under data/ stays out except the corpus manifest: the page reads
+# document metadata from it, and the chunk text it shows lives in the Search
+# index, so no corpus document is ever copied into an image.
+data/*
+!data/corpus
+data/corpus/*
+!data/corpus/manifest.json
+.env
 mlflow.db
 mlruns
 outputs

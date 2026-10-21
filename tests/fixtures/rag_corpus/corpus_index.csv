@@ -1,0 +1,5 @@
+file,format,type
+META_Fixture_Knowledge_Base.md,md,META
+Postmortem_Siemens_PLC_ROLLBACK_FG-DOC-901.md,md,Postmortem
+CrossVendor_Siemens_to_Cisco_FG-DOC-902.md,md,CrossVendor
+Policy_Fixture_Kernel_Policy_FG-DOC-903.md,md,Policy

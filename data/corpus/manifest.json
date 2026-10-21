@@ -1,0 +1,1494 @@
+{
+  "source": "FirmGuard Lecture and Notes/Session 15 RAG Implementation/docs & code/rag_corpus",
+  "documents": [
+    {
+      "doc_id": "FG-DOC-019",
+      "filename": "Advisory_Cisco_Controller_FG-DOC-019.md",
+      "source_format": "md",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": "Controller",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000013",
+        "DEP_000068",
+        "DEP_000070"
+      ],
+      "malformed_refs": [],
+      "sha256": "df996f875527e82df834bea978d0446b9f1722bf46060265c9ee9311879399cd"
+    },
+    {
+      "doc_id": "FG-DOC-018",
+      "filename": "Advisory_Cisco_Gateway_FG-DOC-018.md",
+      "source_format": "md",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": "Gateway",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000004",
+        "DEP_000035",
+        "DEP_000037"
+      ],
+      "malformed_refs": [],
+      "sha256": "79a15fbeac0c8055b6ec9c5aa1fb6efd20b6483c89a29b5e9475664f886cf1c5"
+    },
+    {
+      "doc_id": "FG-DOC-017",
+      "filename": "Advisory_Cisco_Switch_FG-DOC-017.md",
+      "source_format": "md",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": "Switch",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000008",
+        "DEP_000010",
+        "DEP_000019"
+      ],
+      "malformed_refs": [],
+      "sha256": "396719ff2024b5dedb329039459e0f624c113d55f999c5d3331eb841b35fd2f9"
+    },
+    {
+      "doc_id": "FG-DOC-020",
+      "filename": "Advisory_Honeywell_Controller_FG-DOC-020.pdf",
+      "source_format": "pdf",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": "Controller",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000024",
+        "DEP_000052",
+        "DEP_000090"
+      ],
+      "malformed_refs": [],
+      "sha256": "36d70717236e4123c6a3b06a81fed99790a5198b9a6402347a217889f714b507"
+    },
+    {
+      "doc_id": "FG-DOC-021",
+      "filename": "Advisory_Honeywell_HMI_FG-DOC-021.md",
+      "source_format": "md",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": "HMI",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000058",
+        "DEP_000064",
+        "DEP_000119"
+      ],
+      "malformed_refs": [],
+      "sha256": "64dc22dc8356eff44132f32b17a885c74cf3d3a92cc42c5bd44debb7164d01bc"
+    },
+    {
+      "doc_id": "FG-DOC-022",
+      "filename": "Advisory_Honeywell_PLC_FG-DOC-022.pdf",
+      "source_format": "pdf",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000009",
+        "DEP_000033",
+        "DEP_000078"
+      ],
+      "malformed_refs": [],
+      "sha256": "db8588afad0dc7e74362bb828889f7d5bc887d70e9717e13b3476a002dcb6c2c"
+    },
+    {
+      "doc_id": "FG-DOC-025",
+      "filename": "Advisory_Schneider_HMI_FG-DOC-025.pdf",
+      "source_format": "pdf",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": "HMI",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000087",
+        "DEP_000122",
+        "DEP_000147"
+      ],
+      "malformed_refs": [],
+      "sha256": "76128c328ebefc8bc433c595ce73c08d00574d35da97cc7d5330b8a7226e123b"
+    },
+    {
+      "doc_id": "FG-DOC-024",
+      "filename": "Advisory_Schneider_PLC_FG-DOC-024.md",
+      "source_format": "md",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000006",
+        "DEP_000011",
+        "DEP_000023"
+      ],
+      "malformed_refs": [],
+      "sha256": "82dbcc6dd8cf55b3aa09cf7f9129ea728ae0549c7a0ae86f3e61eebecd3fd4a5"
+    },
+    {
+      "doc_id": "FG-DOC-023",
+      "filename": "Advisory_Schneider_RTU_FG-DOC-023.md",
+      "source_format": "md",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": "RTU",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000002",
+        "DEP_000065",
+        "DEP_000066"
+      ],
+      "malformed_refs": [],
+      "sha256": "6e753d3aab4138224942c48b43a30c728449f3f2946e189e4bddae1b6a8bd264"
+    },
+    {
+      "doc_id": "FG-DOC-015",
+      "filename": "Advisory_Siemens_HMI_FG-DOC-015.pdf",
+      "source_format": "pdf",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "HMI",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000003",
+        "DEP_000034",
+        "DEP_000055"
+      ],
+      "malformed_refs": [],
+      "sha256": "180b08c84bcc2d90b03019e897cccae3829e4452720e768c5d41787f77202e3a"
+    },
+    {
+      "doc_id": "FG-DOC-014",
+      "filename": "Advisory_Siemens_PLC_FG-DOC-014.pdf",
+      "source_format": "pdf",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000001",
+        "DEP_000005",
+        "DEP_000059"
+      ],
+      "malformed_refs": [],
+      "sha256": "226e703c73acaa9a6b71fbd10eb6cfc0099cdf4d765ff454915c7dec47b1e7a1"
+    },
+    {
+      "doc_id": "FG-DOC-016",
+      "filename": "Advisory_Siemens_RTU_FG-DOC-016.pdf",
+      "source_format": "pdf",
+      "document_type": "Advisory",
+      "retrieval_mode": "hybrid",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "RTU",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000022",
+        "DEP_000092",
+        "DEP_000105"
+      ],
+      "malformed_refs": [],
+      "sha256": "f3fa87200ed9b01b644d5b2808c50460c285727441fee3219248309f346de9fa"
+    },
+    {
+      "doc_id": "FG-DOC-068",
+      "filename": "CrossVendor_Cisco_to_Honeywell_FG-DOC-068.md",
+      "source_format": "md",
+      "document_type": "CrossVendor",
+      "retrieval_mode": "vector",
+      "vendor": "cross-vendor",
+      "vendors": [
+        "Cisco",
+        "Honeywell"
+      ],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000008",
+        "DEP_005284",
+        "DEP_007670",
+        "DEP_012923"
+      ],
+      "malformed_refs": [],
+      "sha256": "99db1f22e5038252857f1f12af9f79e31c8841c3b2af7375077f62e6fac76a87"
+    },
+    {
+      "doc_id": "FG-DOC-065",
+      "filename": "CrossVendor_Cisco_to_Schneider_FG-DOC-065.md",
+      "source_format": "md",
+      "document_type": "CrossVendor",
+      "retrieval_mode": "vector",
+      "vendor": "cross-vendor",
+      "vendors": [
+        "Cisco",
+        "Schneider"
+      ],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000004",
+        "DEP_003379",
+        "DEP_012284",
+        "DEP_013876"
+      ],
+      "malformed_refs": [],
+      "sha256": "06cd40276c3c80f7700eaac9fcfae6e1eacf58484b2eed0d11cf301efa036e1d"
+    },
+    {
+      "doc_id": "FG-DOC-066",
+      "filename": "CrossVendor_Honeywell_to_Schneider_FG-DOC-066.md",
+      "source_format": "md",
+      "document_type": "CrossVendor",
+      "retrieval_mode": "vector",
+      "vendor": "cross-vendor",
+      "vendors": [
+        "Honeywell",
+        "Schneider"
+      ],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_001171",
+        "DEP_007786",
+        "DEP_012331",
+        "DEP_015296"
+      ],
+      "malformed_refs": [],
+      "sha256": "148b65c01acf9f34db5b7d72655c02e4ce2bc0a900f53ff1bf10743f6a02ab99"
+    },
+    {
+      "doc_id": "FG-DOC-063",
+      "filename": "CrossVendor_Siemens_to_Cisco_FG-DOC-063.md",
+      "source_format": "md",
+      "document_type": "CrossVendor",
+      "retrieval_mode": "vector",
+      "vendor": "cross-vendor",
+      "vendors": [
+        "Siemens",
+        "Cisco"
+      ],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000001",
+        "DEP_005190",
+        "DEP_012388",
+        "DEP_016977"
+      ],
+      "malformed_refs": [],
+      "sha256": "7ababa7b6d01bf6108e4a257ce47079d3955d708d9f78218d7287fc5884fc992"
+    },
+    {
+      "doc_id": "FG-DOC-064",
+      "filename": "CrossVendor_Siemens_to_Honeywell_FG-DOC-064.md",
+      "source_format": "md",
+      "document_type": "CrossVendor",
+      "retrieval_mode": "vector",
+      "vendor": "cross-vendor",
+      "vendors": [
+        "Siemens",
+        "Honeywell"
+      ],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000001",
+        "DEP_012388",
+        "DEP_016977"
+      ],
+      "malformed_refs": [
+        "DEP_05190"
+      ],
+      "sha256": "926c3887065bf0fe5cc71cad5e69ee9250bb93761f300752aea4302d92521176"
+    },
+    {
+      "doc_id": "FG-DOC-067",
+      "filename": "CrossVendor_Siemens_to_Schneider_FG-DOC-067.md",
+      "source_format": "md",
+      "document_type": "CrossVendor",
+      "retrieval_mode": "vector",
+      "vendor": "cross-vendor",
+      "vendors": [
+        "Siemens",
+        "Schneider"
+      ],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000003",
+        "DEP_003203",
+        "DEP_009099",
+        "DEP_011780"
+      ],
+      "malformed_refs": [],
+      "sha256": "007d4b6ef6ae68fa5427bcea9e8d5da4719fe8a1a8b57c3900f32317fbfb1ac0"
+    },
+    {
+      "doc_id": "FG-DOC-054",
+      "filename": "Matrix_Device_Family_Risk_Matrix_FG-DOC-054.md",
+      "source_format": "md",
+      "document_type": "Matrix",
+      "retrieval_mode": "vectorless",
+      "vendor": "vendor-neutral",
+      "vendors": [],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [],
+      "malformed_refs": [],
+      "sha256": "811ba895911f69cd09622b3a84d214d02b84451b6852c2d3fd68dbbf4b9989e0"
+    },
+    {
+      "doc_id": "FG-DOC-051",
+      "filename": "Matrix_Fleet_Tier_Risk_Matrix_FG-DOC-051.md",
+      "source_format": "md",
+      "document_type": "Matrix",
+      "retrieval_mode": "vectorless",
+      "vendor": "vendor-neutral",
+      "vendors": [],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [],
+      "malformed_refs": [],
+      "sha256": "e70bbd7794e17641128dfc9abb2dafd632e169e7cd31e6613dab5cc0fa5a6601"
+    },
+    {
+      "doc_id": "FG-DOC-053",
+      "filename": "Matrix_Site_Criticality_Matrix_FG-DOC-053.md",
+      "source_format": "md",
+      "document_type": "Matrix",
+      "retrieval_mode": "vectorless",
+      "vendor": "vendor-neutral",
+      "vendors": [],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [],
+      "malformed_refs": [],
+      "sha256": "4652a43b4045614a97cc2c8ac5052140a7834b1846c16243ec4a68bd9101485a"
+    },
+    {
+      "doc_id": "FG-DOC-052",
+      "filename": "Matrix_Vendor_Risk_Profile_Matrix_FG-DOC-052.md",
+      "source_format": "md",
+      "document_type": "Matrix",
+      "retrieval_mode": "vectorless",
+      "vendor": "vendor-neutral",
+      "vendors": [],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [],
+      "malformed_refs": [],
+      "sha256": "8ebbf92a688724518aedb134db05eaf85d69936e6b48ac3650c25784d49c84df"
+    },
+    {
+      "doc_id": "FG-DOC-000",
+      "filename": "META_FirmGuard_RAG_Knowledge_Base.md",
+      "source_format": "md",
+      "document_type": "META",
+      "retrieval_mode": "always",
+      "vendor": "vendor-neutral",
+      "vendors": [],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": null,
+      "provenance": "internal_derived",
+      "source_deployment_ids": [],
+      "malformed_refs": [],
+      "sha256": "7eaff172db885c3e6c814a135c51ce4c4b66dca7fc3cad271f49fac7684775b9"
+    },
+    {
+      "doc_id": "FG-DOC-048",
+      "filename": "Policy_High_CVSS_Deployment_Policy_FG-DOC-048.pdf",
+      "source_format": "pdf",
+      "document_type": "Policy",
+      "retrieval_mode": "vectorless",
+      "vendor": "vendor-neutral",
+      "vendors": [],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [],
+      "malformed_refs": [],
+      "sha256": "edf45e53abe580c0251cb6cfbd90c573f1ec24f1b10e2f1d90f0e87a2483f5b8"
+    },
+    {
+      "doc_id": "FG-DOC-049",
+      "filename": "Policy_Kernel_and_Bootloader_Touch_Policy_FG-DOC-049.pdf",
+      "source_format": "pdf",
+      "document_type": "Policy",
+      "retrieval_mode": "vectorless",
+      "vendor": "vendor-neutral",
+      "vendors": [],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [],
+      "malformed_refs": [],
+      "sha256": "71a7cd3466e698211daedd5619c9016e7bef43a7be4cd1e5058302ea9fbf92b5"
+    },
+    {
+      "doc_id": "FG-DOC-047",
+      "filename": "Policy_Major_Version_Jump_Policy_FG-DOC-047.md",
+      "source_format": "md",
+      "document_type": "Policy",
+      "retrieval_mode": "vectorless",
+      "vendor": "vendor-neutral",
+      "vendors": [],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [],
+      "malformed_refs": [],
+      "sha256": "7eb84aceca15b5b40a7e90243b24401085a4d3f0c19c11d13b0fa7adf1ab45a9"
+    },
+    {
+      "doc_id": "FG-DOC-050",
+      "filename": "Policy_Repeat_Failure_Device_Policy_FG-DOC-050.pdf",
+      "source_format": "pdf",
+      "document_type": "Policy",
+      "retrieval_mode": "vectorless",
+      "vendor": "vendor-neutral",
+      "vendors": [],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [],
+      "malformed_refs": [],
+      "sha256": "6343f6d22eb85c1dca00f04688710ae63bfb42925c7d54ad14f9bc8a5e62c95d"
+    },
+    {
+      "doc_id": "FG-DOC-046",
+      "filename": "Policy_TIER_1_Emergency_Deployment_Policy_FG-DOC-046.md",
+      "source_format": "md",
+      "document_type": "Policy",
+      "retrieval_mode": "vectorless",
+      "vendor": "vendor-neutral",
+      "vendors": [],
+      "device_family": null,
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [],
+      "malformed_refs": [],
+      "sha256": "27fd7dd2eb544020e4bd5d2b27697648f91859f877d739b1e46b417a47f3150a"
+    },
+    {
+      "doc_id": "FG-DOC-006",
+      "filename": "Postmortem_Cisco_Controller_DEGRADED_FG-DOC-006.md",
+      "source_format": "md",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": "Controller",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000070",
+        "DEP_000071",
+        "DEP_000106"
+      ],
+      "malformed_refs": [],
+      "sha256": "b578c6ce4eefecebf37213d19d7c90514bab9a8473710900b0cf3080a69ab140"
+    },
+    {
+      "doc_id": "FG-DOC-005",
+      "filename": "Postmortem_Cisco_Gateway_FAILED_FG-DOC-005.md",
+      "source_format": "md",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": "Gateway",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000035",
+        "DEP_000205"
+      ],
+      "malformed_refs": [
+        "DEP_00004"
+      ],
+      "sha256": "2d1824f0a06eca67f908e203d4e5a4c2f1766518abc526b8dc5d5278442a3b56"
+    },
+    {
+      "doc_id": "FG-DOC-004",
+      "filename": "Postmortem_Cisco_Switch_ROLLBACK_FG-DOC-004.pdf",
+      "source_format": "pdf",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": "Switch",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000008",
+        "DEP_000010",
+        "DEP_000028"
+      ],
+      "malformed_refs": [],
+      "sha256": "b86aac67e1f62abfef48210e3a2d5286154613689dec9b0a596d86f822a995ad"
+    },
+    {
+      "doc_id": "FG-DOC-007",
+      "filename": "Postmortem_Honeywell_Controller_ROLLBACK_FG-DOC-007.md",
+      "source_format": "md",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": "Controller",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000052",
+        "DEP_000090",
+        "DEP_000118"
+      ],
+      "malformed_refs": [
+        "DEP_00118"
+      ],
+      "sha256": "7deec6856731fe1e896f1e18a5ebf232bd9a0ea6ffb12ad78c834c0d81011df6"
+    },
+    {
+      "doc_id": "FG-DOC-008",
+      "filename": "Postmortem_Honeywell_HMI_FAILED_FG-DOC-008.md",
+      "source_format": "md",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": "HMI",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000058",
+        "DEP_000515",
+        "DEP_000594"
+      ],
+      "malformed_refs": [],
+      "sha256": "5f3f8fbf8835d3707a3493a56ed44932d048d1db8d945468114144b16f552c30"
+    },
+    {
+      "doc_id": "FG-DOC-009",
+      "filename": "Postmortem_Honeywell_PLC_DEGRADED_FG-DOC-009.md",
+      "source_format": "md",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000009",
+        "DEP_000033",
+        "DEP_000078"
+      ],
+      "malformed_refs": [],
+      "sha256": "76bce3ff77fb3095dd253de38ac77512bcb118749dbaf45904d96563f558cb00"
+    },
+    {
+      "doc_id": "FG-DOC-012",
+      "filename": "Postmortem_Schneider_Gateway_DEGRADED_FG-DOC-012.md",
+      "source_format": "md",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": "Gateway",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000164",
+        "DEP_000176",
+        "DEP_000186"
+      ],
+      "malformed_refs": [],
+      "sha256": "25eb84fd7cf7d3fc58655dca60b210d1e2e2cc11715725ab7f0de3b18384b6bb"
+    },
+    {
+      "doc_id": "FG-DOC-011",
+      "filename": "Postmortem_Schneider_PLC_FAILED_FG-DOC-011.md",
+      "source_format": "md",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000006",
+        "DEP_000256",
+        "DEP_000416"
+      ],
+      "malformed_refs": [],
+      "sha256": "a5299c8beb9c378c189f2a2f37641d9b64e8e0d06c0bb17b12bbc24048db8b00"
+    },
+    {
+      "doc_id": "FG-DOC-010",
+      "filename": "Postmortem_Schneider_RTU_ROLLBACK_FG-DOC-010.pdf",
+      "source_format": "pdf",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": "RTU",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000002",
+        "DEP_000129",
+        "DEP_000246"
+      ],
+      "malformed_refs": [
+        "DEP_00"
+      ],
+      "sha256": "2bc3bd4646bcbf2c7ca755bc64ea744b9dcebac9a38c7a52a6c3b15e4dfd896e"
+    },
+    {
+      "doc_id": "FG-DOC-002",
+      "filename": "Postmortem_Siemens_HMI_FAILED_FG-DOC-002.md",
+      "source_format": "md",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "HMI",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000069"
+      ],
+      "malformed_refs": [
+        "DEP_00003",
+        "DEP_0143"
+      ],
+      "sha256": "a0593467a94f7f691d078e1dfb4cac1be72f2641bd4e630e698ec9c6d302525d"
+    },
+    {
+      "doc_id": "FG-DOC-001",
+      "filename": "Postmortem_Siemens_PLC_ROLLBACK_FG-DOC-001.md",
+      "source_format": "md",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000001",
+        "DEP_000059",
+        "DEP_000084"
+      ],
+      "malformed_refs": [],
+      "sha256": "8642ba60c13eeb3a3fe4dd887ef5990b059326263c670857d4f9a53767f8269a"
+    },
+    {
+      "doc_id": "FG-DOC-013",
+      "filename": "Postmortem_Siemens_PLC_ROLLBACK_FG-DOC-013.md",
+      "source_format": "md",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000010",
+        "DEP_000034",
+        "DEP_000037"
+      ],
+      "malformed_refs": [],
+      "sha256": "c839e4288d01af08e36cbbf831fc143125609f4cca3c74ca60e1aae0d18c89b0"
+    },
+    {
+      "doc_id": "FG-DOC-003",
+      "filename": "Postmortem_Siemens_RTU_ROLLBACK_FG-DOC-003.md",
+      "source_format": "md",
+      "document_type": "Postmortem",
+      "retrieval_mode": "vector",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "RTU",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000092",
+        "DEP_000175",
+        "DEP_000189"
+      ],
+      "malformed_refs": [],
+      "sha256": "3c8d696f94236e9ad5cd01321d78f9b7b91e995b7f09a1e6e55b668590557e98"
+    },
+    {
+      "doc_id": "FG-DOC-027",
+      "filename": "RiskNote_Cisco_Switch_FG-DOC-027.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": "Switch",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000036",
+        "DEP_000357",
+        "DEP_000561",
+        "DEP_000688"
+      ],
+      "malformed_refs": [],
+      "sha256": "92679183e4efdaf20e8138e81889b7e0a39abd8286f1cb9ebd310bbad812a6d9"
+    },
+    {
+      "doc_id": "FG-DOC-033",
+      "filename": "RiskNote_Cisco_Switch_FG-DOC-033.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": "Switch",
+      "transition_class": null,
+      "evidence_strength": "MEDIUM",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000004",
+        "DEP_000010",
+        "DEP_000617",
+        "DEP_000664"
+      ],
+      "malformed_refs": [],
+      "sha256": "b54ebf6a850ea98dd38276525d1da5c2c42b5f07d05308930b3d0a7e9d910d05"
+    },
+    {
+      "doc_id": "FG-DOC-028",
+      "filename": "RiskNote_Honeywell_Controller_FG-DOC-028.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": "Controller",
+      "transition_class": null,
+      "evidence_strength": "MEDIUM",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000024",
+        "DEP_000214",
+        "DEP_000855",
+        "DEP_000867"
+      ],
+      "malformed_refs": [],
+      "sha256": "2a64b7ceb210aa5e51501f80a5b623a6f2022bdfeae351599215ea6a1281e4d9"
+    },
+    {
+      "doc_id": "FG-DOC-034",
+      "filename": "RiskNote_Honeywell_Controller_FG-DOC-034.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": "Controller",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000058",
+        "DEP_000202",
+        "DEP_000224",
+        "DEP_000295"
+      ],
+      "malformed_refs": [],
+      "sha256": "d1932007ccc9af083a30768ded92eacc2619ce7a8c9f99fd0ac4e63d24adac2f"
+    },
+    {
+      "doc_id": "FG-DOC-035",
+      "filename": "RiskNote_Schneider_PLC_FG-DOC-035.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "MEDIUM",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000154",
+        "DEP_000203",
+        "DEP_000210",
+        "DEP_000298"
+      ],
+      "malformed_refs": [],
+      "sha256": "cb98aa5bc63876fef7931c3cb13eb34e4ac641b30ea9aae07c0bfa97ff7d7fec"
+    },
+    {
+      "doc_id": "FG-DOC-029",
+      "filename": "RiskNote_Schneider_RTU_FG-DOC-029.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": "RTU",
+      "transition_class": null,
+      "evidence_strength": "LOW",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_002161",
+        "DEP_002231",
+        "DEP_006229",
+        "DEP_011417"
+      ],
+      "malformed_refs": [],
+      "sha256": "84c37c644cc0e2890fcfe6a69e89f4c8322936f53afbabe6602c9ad7e9349a3a"
+    },
+    {
+      "doc_id": "FG-DOC-026",
+      "filename": "RiskNote_Siemens_PLC_FG-DOC-026.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "MEDIUM",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000305",
+        "DEP_000703",
+        "DEP_000805",
+        "DEP_000857"
+      ],
+      "malformed_refs": [],
+      "sha256": "de7a09dd50c1f1aa6aab4ecfc2b83ec47e26166f1b12c8ab22c61320f932c802"
+    },
+    {
+      "doc_id": "FG-DOC-030",
+      "filename": "RiskNote_Siemens_PLC_FG-DOC-030.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000004",
+        "DEP_000010",
+        "DEP_000019",
+        "DEP_000034"
+      ],
+      "malformed_refs": [],
+      "sha256": "8a38f5955fc3c60f67ad87661f680ae0390a6217f0f7ec6abc4c75a7e7bb2872"
+    },
+    {
+      "doc_id": "FG-DOC-031",
+      "filename": "RiskNote_Siemens_PLC_FG-DOC-031.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000004",
+        "DEP_000034",
+        "DEP_000069",
+        "DEP_000202"
+      ],
+      "malformed_refs": [],
+      "sha256": "6bbe629e510db6c17391ae1bf6b5cc34ecd8f549eb10fa200aba9e7d718d81ce"
+    },
+    {
+      "doc_id": "FG-DOC-032",
+      "filename": "RiskNote_Siemens_PLC_FG-DOC-032.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000059",
+        "DEP_000114",
+        "DEP_000126",
+        "DEP_000132"
+      ],
+      "malformed_refs": [],
+      "sha256": "694144f3b3bb707efc53d6dc36d5abe02b663f240b2027b6beaca5fe0afa20b3"
+    },
+    {
+      "doc_id": "FG-DOC-036",
+      "filename": "RiskNote_Siemens_PLC_FG-DOC-036.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "MEDIUM",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000720",
+        "DEP_000822",
+        "DEP_000937",
+        "DEP_001698"
+      ],
+      "malformed_refs": [],
+      "sha256": "a3e7b23691f7ee745499ff989041e56270d3194242071ea834a8e3b9e7d86761"
+    },
+    {
+      "doc_id": "FG-DOC-037",
+      "filename": "RiskNote_Siemens_PLC_FG-DOC-037.md",
+      "source_format": "md",
+      "document_type": "RiskNote",
+      "retrieval_mode": "vector",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000010",
+        "DEP_000011",
+        "DEP_000013",
+        "DEP_000019"
+      ],
+      "malformed_refs": [],
+      "sha256": "10b07b6cb190e7e19fcc3c92f67e81cb5edd56151d5c72544a30778d3f2234b9"
+    },
+    {
+      "doc_id": "FG-DOC-041",
+      "filename": "Runbook_Cisco_Gateway_FG-DOC-041.md",
+      "source_format": "md",
+      "document_type": "Runbook",
+      "retrieval_mode": "vectorless",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": "Gateway",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000037",
+        "DEP_000153",
+        "DEP_000200"
+      ],
+      "malformed_refs": [],
+      "sha256": "8a108ca4282f9b9ce7d47b6224607a15357e807fddbd360b8af6836a31efb31f"
+    },
+    {
+      "doc_id": "FG-DOC-040",
+      "filename": "Runbook_Cisco_Switch_FG-DOC-040.md",
+      "source_format": "md",
+      "document_type": "Runbook",
+      "retrieval_mode": "vectorless",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": "Switch",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000008",
+        "DEP_000010",
+        "DEP_000028"
+      ],
+      "malformed_refs": [],
+      "sha256": "55fbe678755ec94c4e5cfd5c9b295b2dae18f627717d2246315b999addd7b1bb"
+    },
+    {
+      "doc_id": "FG-DOC-042",
+      "filename": "Runbook_Honeywell_Controller_FG-DOC-042.pdf",
+      "source_format": "pdf",
+      "document_type": "Runbook",
+      "retrieval_mode": "vectorless",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": "Controller",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000052",
+        "DEP_000090",
+        "DEP_000118"
+      ],
+      "malformed_refs": [],
+      "sha256": "290e38f100f61a99d757ac11bbc76baf1010e16788495f3edaa84dd866f691b7"
+    },
+    {
+      "doc_id": "FG-DOC-043",
+      "filename": "Runbook_Honeywell_HMI_FG-DOC-043.md",
+      "source_format": "md",
+      "document_type": "Runbook",
+      "retrieval_mode": "vectorless",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": "HMI",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000064",
+        "DEP_000119",
+        "DEP_000202"
+      ],
+      "malformed_refs": [],
+      "sha256": "74c27aef0878da56ab2e97f0961ce3d5121b011049968e90ad3e4a24e0033219"
+    },
+    {
+      "doc_id": "FG-DOC-045",
+      "filename": "Runbook_Schneider_PLC_FG-DOC-045.md",
+      "source_format": "md",
+      "document_type": "Runbook",
+      "retrieval_mode": "vectorless",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000011",
+        "DEP_000048",
+        "DEP_000271"
+      ],
+      "malformed_refs": [],
+      "sha256": "bfa418a2b99faa4de44ae04a609c632904fa79b0b9afa8dad5765035956c416a"
+    },
+    {
+      "doc_id": "FG-DOC-044",
+      "filename": "Runbook_Schneider_RTU_FG-DOC-044.pdf",
+      "source_format": "pdf",
+      "document_type": "Runbook",
+      "retrieval_mode": "vectorless",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": "RTU",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000002",
+        "DEP_000129",
+        "DEP_000246"
+      ],
+      "malformed_refs": [],
+      "sha256": "daff1251205e9deb9f95c17cb94f232a2c3f921ad31b74c98dc829af6ffbb3de"
+    },
+    {
+      "doc_id": "FG-DOC-039",
+      "filename": "Runbook_Siemens_HMI_FG-DOC-039.md",
+      "source_format": "md",
+      "document_type": "Runbook",
+      "retrieval_mode": "vectorless",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "HMI",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000034",
+        "DEP_000181",
+        "DEP_000225"
+      ],
+      "malformed_refs": [],
+      "sha256": "6e2a1c1553c09c1cff877d3aeeafffed5effba4d054bfa3667b8d64d0dbeb86f"
+    },
+    {
+      "doc_id": "FG-DOC-038",
+      "filename": "Runbook_Siemens_PLC_FG-DOC-038.pdf",
+      "source_format": "pdf",
+      "document_type": "Runbook",
+      "retrieval_mode": "vectorless",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": "PLC",
+      "transition_class": null,
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000001",
+        "DEP_000059",
+        "DEP_000084"
+      ],
+      "malformed_refs": [],
+      "sha256": "82413572f20d1c6abdf8994f59b6a0b12134ad27c71bcc8e9cedcb6771af5c17"
+    },
+    {
+      "doc_id": "FG-DOC-058",
+      "filename": "Transition_Cisco_extreme_FG-DOC-058.md",
+      "source_format": "md",
+      "document_type": "Transition",
+      "retrieval_mode": "hybrid",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": null,
+      "transition_class": "extreme",
+      "evidence_strength": "MEDIUM",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000004",
+        "DEP_000083",
+        "DEP_000099"
+      ],
+      "malformed_refs": [],
+      "sha256": "f528dec122ecf61c255ccf4d85be94c54f17a31e90db86b0a986e20a7e58f160"
+    },
+    {
+      "doc_id": "FG-DOC-057",
+      "filename": "Transition_Cisco_major_FG-DOC-057.md",
+      "source_format": "md",
+      "document_type": "Transition",
+      "retrieval_mode": "hybrid",
+      "vendor": "Cisco",
+      "vendors": [
+        "Cisco"
+      ],
+      "device_family": null,
+      "transition_class": "major",
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000041",
+        "DEP_000110",
+        "DEP_000149"
+      ],
+      "malformed_refs": [],
+      "sha256": "d9af447bcadee901cb1f77e84c2b7aa12aa0405b9dac2becb4d7058da7bd783d"
+    },
+    {
+      "doc_id": "FG-DOC-060",
+      "filename": "Transition_Honeywell_extreme_FG-DOC-060.md",
+      "source_format": "md",
+      "document_type": "Transition",
+      "retrieval_mode": "hybrid",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": null,
+      "transition_class": "extreme",
+      "evidence_strength": "MEDIUM",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000904",
+        "DEP_001201",
+        "DEP_001431"
+      ],
+      "malformed_refs": [],
+      "sha256": "dd8b16551798fa1c4fbf044f0e8affaf369bf0b874b020a2cce7d57045a31efc"
+    },
+    {
+      "doc_id": "FG-DOC-059",
+      "filename": "Transition_Honeywell_major_FG-DOC-059.md",
+      "source_format": "md",
+      "document_type": "Transition",
+      "retrieval_mode": "hybrid",
+      "vendor": "Honeywell",
+      "vendors": [
+        "Honeywell"
+      ],
+      "device_family": null,
+      "transition_class": "major",
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000024",
+        "DEP_000058",
+        "DEP_000090"
+      ],
+      "malformed_refs": [],
+      "sha256": "bf66bb25a2008e1ef3a1c866e79e2c929f1583fd27a12fceb971845ee711301e"
+    },
+    {
+      "doc_id": "FG-DOC-062",
+      "filename": "Transition_Schneider_extreme_FG-DOC-062.md",
+      "source_format": "md",
+      "document_type": "Transition",
+      "retrieval_mode": "hybrid",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": null,
+      "transition_class": "extreme",
+      "evidence_strength": "MEDIUM",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000321",
+        "DEP_000714",
+        "DEP_001400"
+      ],
+      "malformed_refs": [],
+      "sha256": "ae9867abcbaa1f6c726f9f7b2cc709fc88fee15d42b1f8458ed20a41803494f4"
+    },
+    {
+      "doc_id": "FG-DOC-061",
+      "filename": "Transition_Schneider_major_FG-DOC-061.md",
+      "source_format": "md",
+      "document_type": "Transition",
+      "retrieval_mode": "hybrid",
+      "vendor": "Schneider",
+      "vendors": [
+        "Schneider"
+      ],
+      "device_family": null,
+      "transition_class": "major",
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000002",
+        "DEP_000087",
+        "DEP_000154"
+      ],
+      "malformed_refs": [],
+      "sha256": "b54c6f16c5140b10c2183c6d1b74437f093e819bab1f47c5c5ab353ee7af7b17"
+    },
+    {
+      "doc_id": "FG-DOC-056",
+      "filename": "Transition_Siemens_extreme_FG-DOC-056.md",
+      "source_format": "md",
+      "document_type": "Transition",
+      "retrieval_mode": "hybrid",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": null,
+      "transition_class": "extreme",
+      "evidence_strength": "MEDIUM",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000084",
+        "DEP_000272",
+        "DEP_000443"
+      ],
+      "malformed_refs": [],
+      "sha256": "4b7649a9008976d2d9926b65c5bd9c84dacf2ce7cfe4e594a4b3956f12c17ad3"
+    },
+    {
+      "doc_id": "FG-DOC-055",
+      "filename": "Transition_Siemens_major_FG-DOC-055.md",
+      "source_format": "md",
+      "document_type": "Transition",
+      "retrieval_mode": "hybrid",
+      "vendor": "Siemens",
+      "vendors": [
+        "Siemens"
+      ],
+      "device_family": null,
+      "transition_class": "major",
+      "evidence_strength": "HIGH",
+      "provenance": "internal_derived",
+      "source_deployment_ids": [
+        "DEP_000003",
+        "DEP_000022",
+        "DEP_000055"
+      ],
+      "malformed_refs": [],
+      "sha256": "d98f8b8fc9895feae881d7fbddfd0a0f72d4a847fad7cf7bf4deda4f44afdb9b"
+    }
+  ]
+}

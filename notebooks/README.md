@@ -15,6 +15,15 @@ behavior is abstracted into production modules. Run them in order:
    evaluation of the published artifacts.
 5. `05_local_deployment_test.ipynb` — local CLI append-only checks, OOD
    assertions, and optional non-root Docker parity.
+6. `06_rag_local.ipynb` — the RAG evidence layer on a laptop, following the
+   lecture stack: BGE-small embeddings, exact cosine search, the vendor filter
+   and confidence gate, a retrieval eval the corpus grades itself, negative
+   controls, and Claude Haiku generation with deterministic grounding checks.
+   Independent of 1–5. Unlike them, it imports `firmaware` modules that
+   already exist: `firmaware.rag` for the corpus and chunks, and
+   `firmaware.schema`/`firmaware.features` to derive deployment flags. The
+   retrieval, gate and generation cells are the explicit research path for
+   P3/P4.
 
 ## Start Jupyter
 
@@ -39,6 +48,11 @@ locate the repository whether their kernel starts at the root or in
   `notebook_runs\model\`; it never overwrites production artifacts.
 - Notebook 5 reloads that research bundle and repeats scoring transformations
   explicitly. Its append-only output stays under `notebook_runs\deployment`.
+
+- Notebook 6 generates explanations only when `ANTHROPIC_API_KEY` is set in
+  a `.env` at the repository root (ignored by git). Without it, every cell
+  still runs and generation reports itself skipped. The first run downloads
+  the BGE-small model (~130 MB) from Hugging Face.
 
 Generated notebook artifacts live under `notebook_runs\`, which is ignored.
 The committed notebooks include the latest verified outputs so exploration,

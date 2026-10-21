@@ -202,10 +202,27 @@ for name in ("FIRMAWARE_ARTIFACTS_URI", "FIRMAWARE_DATA_URI", "FIRMAWARE_UPCOMIN
 # Without this, DefaultAzureCredential cannot tell which user-assigned identity
 # it is meant to be and fails on the first read -- with an error that reads like
 # the identity is missing rather than ambiguous.
-if env.get("AZURE_CLIENT_ID") != expected_client:
-    problems.append(
-        f"AZURE_CLIENT_ID is {env.get('AZURE_CLIENT_ID')!r}, expected {expected_client!r}"
-    )
+# No single quotes anywhere in this program: it is one shell single-quoted
+# argument, and a quote inside would end it and splice in a bare shell word.
+client = env.get("AZURE_CLIENT_ID")
+if client != expected_client:
+    problems.append(f"AZURE_CLIENT_ID is {client!r}, expected {expected_client!r}")
+
+# The evidence section renders only when all three endpoints are set; with one
+# missing the page quietly drops the section, which reads like a deploy that
+# never included it. Endpoints only: a key-shaped setting would mean a secret
+# had been put where an identity belongs.
+for name in ("FIRMAWARE_SEARCH_ENDPOINT", "FIRMAWARE_FOUNDRY_ENDPOINT"):
+    value = env.get(name, "")
+    if not value.startswith("https://"):
+        problems.append(f"{name} is {value!r}, expected an https endpoint")
+for name in ("FIRMAWARE_FOUNDRY_DEPLOYMENT", "FIRMAWARE_FOUNDRY_EMBEDDING_DEPLOYMENT",
+             "FIRMAWARE_SEARCH_INDEX"):
+    if not env.get(name):
+        problems.append(f"{name} is unset, so the evidence section would not render")
+for name in env:
+    if "KEY" in name.upper() or "SECRET" in name.upper():
+        problems.append(f"{name} is set: the evidence layer is keyless, nothing should carry a key")
 
 if problems:
     raise SystemExit("\n".join(f"FAIL: {problem}" for problem in problems))
@@ -234,11 +251,13 @@ import json, sys
 assignments = json.loads(sys.argv[1] or "[]")
 roles = sorted(item["role"] for item in assignments)
 
-# Exactly what modules/identity/main.tf grants this principal. Any addition is a
-# change to the blast radius of an internet-facing container, so the check is an
-# equality rather than a subset test.
+# Exactly what modules/identity/main.tf and modules/evidence/main.tf grant this
+# principal. Any addition is a change to the blast radius of an internet-facing
+# container, so the check is an equality rather than a subset test. The two
+# evidence roles are data-plane only: read the corpus index, run the models.
 expected = sorted(
-    ["Storage Blob Data Reader"] * 3 + ["AcrPull"]
+    ["Storage Blob Data Reader"] * 3
+    + ["AcrPull", "Search Index Data Reader", "Cognitive Services User"]
 )
 
 # Named individually so the failure says which one appeared, rather than just
@@ -250,6 +269,9 @@ forbidden = {
     "User Access Administrator": "could re-grant anything to anyone",
     "Key Vault Administrator": "the page has no business in the vault",
     "Key Vault Secrets User": "the page has no business in the vault",
+    "Search Index Data Contributor": "would let the page rewrite the evidence it cites",
+    "Search Service Contributor": "would let the page replace or delete the index",
+    "Cognitive Services Contributor": "is control-plane write over the model account",
 }
 for item in assignments:
     role = item["role"]
@@ -267,7 +289,7 @@ if roles != expected:
         f"FAIL: app identity holds {roles}, expected exactly {expected}"
     )
 ' "${assignments}" || exit 1
-pass "exactly four assignments: three Storage Blob Data Reader, one AcrPull"
+pass "exactly six assignments: three Storage Blob Data Reader, AcrPull, Search Index Data Reader, Cognitive Services User"
 pass "no write role, no append role, no vault role, no Contributor"
 
 # One more, and it is the assertion the others only imply: read access to the

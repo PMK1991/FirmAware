@@ -67,3 +67,14 @@ variable "zone_redundant" {
   default     = false
   description = "Prod only, and only meaningful with a subnet: the platform cannot spread replicas across zones on platform-managed networking."
 }
+
+variable "evidence_env" {
+  type        = map(string)
+  default     = {}
+  description = "Evidence-layer settings (Search and Foundry endpoints, deployment names) passed to the page as environment variables. Endpoints only: both services refuse keys."
+
+  validation {
+    condition     = alltrue([for name in keys(var.evidence_env) : startswith(name, "FIRMAWARE_")])
+    error_message = "evidence_env carries FIRMAWARE_* settings only; credentials come from the managed identity, never from here."
+  }
+}

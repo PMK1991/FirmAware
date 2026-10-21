@@ -12,11 +12,21 @@ NOTEBOOKS = [
     "04_training_and_evaluation.ipynb",
     "05_local_deployment_test.ipynb",
 ]
+# The RAG notebook is held to the same executed-and-clean standard but not to
+# the no-import rule below. The ML notebooks are the research path that came
+# before their modules; this one builds on modules that already exist (the
+# corpus and chunker, plus schema and features for deployment flags), and its
+# explicit cells are the research path for the parts that do not yet
+# (retrieval, gate, generation).
+RAG_NOTEBOOKS = ["06_rag_local.ipynb"]
 
 
 class NotebookTests(unittest.TestCase):
     def test_research_notebook_sequence_is_complete_and_executed(self) -> None:
-        for name in NOTEBOOKS:
+        # The RAG notebook's outputs quote the corpus, whose publication is
+        # undecided, so a checkout may lack it; when present it must be clean.
+        rag = [n for n in RAG_NOTEBOOKS if (ROOT / "notebooks" / n).is_file()]
+        for name in NOTEBOOKS + rag:
             path = ROOT / "notebooks" / name
             notebook = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(notebook["nbformat"], 4)

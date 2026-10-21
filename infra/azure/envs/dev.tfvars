@@ -86,3 +86,15 @@ monthly_budget = 40
 # visitor pays a cold start of roughly half a minute. app_image is not set here:
 # it is a digest, so it comes from the build rather than from a file.
 app_min_replicas = 0
+# RELAXED 4 — the evidence index runs on the Free Search tier: $0, one per
+# subscription, 50 MB, no SLA and no private endpoint. 377 chunks with
+# 1536-dimension vectors are about 3 MB. prod keeps the default (basic).
+search_sku = "free"
+
+# dev also deploys the eval judge, a different model family from the writer so
+# it does not share the writer's blind spots. prod serves explanations only.
+foundry_models = {
+  "Llama-3.3-70B-Instruct" = { format = "Meta", version = "9", capacity = 20 }
+  "text-embedding-3-small" = { format = "OpenAI", version = "1", capacity = 100 }
+  "gpt-oss-120b"           = { format = "OpenAI-OSS", version = "1", capacity = 50 }
+}
