@@ -119,6 +119,11 @@ CVE-2025-10279
 # invokes it, at container start, on input no user supplies.
 GHSA-6v7p-g79w-8964
 CVE-2025-47273
+# Same mechanism, added 2026-10-21: pip 26.2.2 vendors urllib3 2.7.0. The
+# installed urllib3 is 2.8.0, held there by a floor in pyproject.toml, so the
+# copy trivy reports is pip's own, used only when the AML driver runs pip.
+CVE-2026-97687
+CVE-2026-97689
 
 # Not a separate decision: mlflow 2.22.5 declares pyarrow<20, so the fix
 # version trivy wants (23.0.1) is unreachable while the pin above stands. The

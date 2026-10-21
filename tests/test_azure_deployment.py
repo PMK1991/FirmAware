@@ -1486,10 +1486,11 @@ class EvidenceLayerTests(unittest.TestCase):
         self.assertIn("module.evidence.search_endpoint", block)
         self.assertNotRegex(block.upper(), r"KEY\s*=")
 
-    def test_adoption_of_the_hand_made_dev_resources_is_dev_only(self) -> None:
-        imports = _read("infra", "azure", "evidence_imports.tf")
-        self.assertIn('var.env == "dev"', imports)
-        self.assertEqual(imports.count("import {"), 3)
+    def test_dev_search_is_the_free_tier_and_prod_takes_the_default(self) -> None:
+        # The hand-made dev resources were adopted with import blocks, then the
+        # blocks were removed: tfsec's parser predates them and fails the scan.
+        for path in (ROOT / "infra" / "azure").rglob("*.tf"):
+            self.assertNotRegex(path.read_text(encoding="utf-8"), r"(?m)^import\s*\{", path.name)
         self.assertIn('search_sku = "free"', _read("infra", "azure", "envs", "dev.tfvars"))
         self.assertNotIn("search_sku", _read("infra", "azure", "envs", "prod.tfvars"))
 
