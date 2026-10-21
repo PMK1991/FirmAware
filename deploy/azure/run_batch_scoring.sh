@@ -73,11 +73,18 @@ echo "[batch] publishing ${staging_path} to ${scores_uri}"
 # that actually holds the append-only role on the scores container. Read from
 # the compute rather than configured, so dev and prod cannot drift apart and a
 # rebuilt cluster needs no edit here.
+#
+# By resource id, then the identity itself for the client id: ml extension
+# 2.45 stopped returning client_id on the compute's identity (2.44 did), so
+# reading it off the compute fails on whichever CLI the runner installs.
 cluster="${FIRMAWARE_COMPUTE_NAME:-firmaware-cluster}"
-client_id="$(az_ml compute show --name "${cluster}" \
-  --query "identity.user_assigned_identities[0].client_id" -o tsv)"
-[[ -n "${client_id}" && "${client_id}" != "None" ]] \
+identity_id="$(az_ml compute show --name "${cluster}" \
+  --query "identity.user_assigned_identities[0].resource_id" -o tsv)"
+[[ -n "${identity_id}" && "${identity_id}" != "None" ]] \
   || { echo "[batch] ${cluster} has no user-assigned identity to authenticate as" >&2; exit 1; }
+client_id="$(az identity show --ids "${identity_id}" --query clientId -o tsv)"
+[[ -n "${client_id}" ]] \
+  || { echo "[batch] could not read the client id of ${identity_id}" >&2; exit 1; }
 
 # Rendered into the spec's own directory: the CLI resolves a relative `code:`
 # against the spec file's location, so a temp file elsewhere makes it look for
