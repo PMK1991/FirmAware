@@ -12,6 +12,8 @@
 # isolation a second endpoint would buy is already there.
 
 resource "azurerm_cognitive_account" "foundry" {
+  # checkov:skip=CKV_AZURE_134:public endpoint, but keyless: with local auth off it accepts only Entra tokens from identities holding Cognitive Services User. No private endpoint is built for this module yet, so network_isolation must add one before prod turns this off
+  # checkov:skip=CKV2_AZURE_22:Microsoft-managed keys; the account stores no customer data at rest beyond model deployments, and prompts carry only a synthetic corpus and scores
   name                  = "ais-${var.name_prefix}-${var.unique_suffix}"
   location              = var.location
   resource_group_name   = var.resource_group_name
@@ -55,6 +57,10 @@ resource "azurerm_cognitive_deployment" "model" {
 }
 
 resource "azurerm_search_service" "this" {
+  # checkov:skip=CKV_AZURE_124:public endpoint, but keyless: RBAC only, the page holds Search Index Data Reader. Same missing private endpoint as the Foundry account above
+  # checkov:skip=CKV_AZURE_207:the service reaches no other Azure resource: documents are pushed by `rag index`, there is no indexer or skillset for an identity to authenticate
+  # checkov:skip=CKV_AZURE_208:the update SLA needs 3 replicas; dev runs the Free tier, which has one, and a rebuild is a new index behind an alias, so a failed update never reaches readers
+  # checkov:skip=CKV_AZURE_209:the query SLA needs 2 replicas; dev runs one, and the only reader is an optional Explain button whose failure leaves every score intact
   name                = "srch-${var.name_prefix}-${var.unique_suffix}"
   location            = var.location
   resource_group_name = var.resource_group_name

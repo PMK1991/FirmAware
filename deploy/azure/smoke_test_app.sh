@@ -202,18 +202,20 @@ for name in ("FIRMAWARE_ARTIFACTS_URI", "FIRMAWARE_DATA_URI", "FIRMAWARE_UPCOMIN
 # Without this, DefaultAzureCredential cannot tell which user-assigned identity
 # it is meant to be and fails on the first read -- with an error that reads like
 # the identity is missing rather than ambiguous.
-if env.get("AZURE_CLIENT_ID") != expected_client:
-    problems.append(
-        f"AZURE_CLIENT_ID is {env.get('AZURE_CLIENT_ID')!r}, expected {expected_client!r}"
-    )
+# No single quotes anywhere in this program: it is one shell single-quoted
+# argument, and a quote inside would end it and splice in a bare shell word.
+client = env.get("AZURE_CLIENT_ID")
+if client != expected_client:
+    problems.append(f"AZURE_CLIENT_ID is {client!r}, expected {expected_client!r}")
 
 # The evidence section renders only when all three endpoints are set; with one
 # missing the page quietly drops the section, which reads like a deploy that
 # never included it. Endpoints only: a key-shaped setting would mean a secret
 # had been put where an identity belongs.
 for name in ("FIRMAWARE_SEARCH_ENDPOINT", "FIRMAWARE_FOUNDRY_ENDPOINT"):
-    if not env.get(name, "").startswith("https://"):
-        problems.append(f"{name} is {env.get(name, '')!r}, expected an https endpoint")
+    value = env.get(name, "")
+    if not value.startswith("https://"):
+        problems.append(f"{name} is {value!r}, expected an https endpoint")
 for name in ("FIRMAWARE_FOUNDRY_DEPLOYMENT", "FIRMAWARE_FOUNDRY_EMBEDDING_DEPLOYMENT",
              "FIRMAWARE_SEARCH_INDEX"):
     if not env.get(name):
