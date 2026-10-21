@@ -20,6 +20,11 @@ from firmaware.rag.corpus import (
 ROOT = Path(__file__).resolve().parents[1]
 CORPUS = ROOT / "data" / "corpus"
 EVENTS = ROOT / "data" / "deployment_events.csv"
+# Only the manifest is committed while publishing the documents is undecided,
+# so "checked out" means the documents themselves, not the directory.
+HAS_DOCUMENTS = CORPUS.is_dir() and any(
+    p.suffix in {".md", ".pdf"} for p in CORPUS.iterdir()
+)
 # Written for the tests, copying no real document, so the lint rules stay
 # tested whether or not the corpus itself is checked in.
 FIXTURE = ROOT / "tests" / "fixtures" / "rag_corpus"
@@ -45,14 +50,16 @@ def _slice_corpus(directory: Path) -> Path:
     return directory
 
 
-@unittest.skipIf(not CORPUS.exists(), "the corpus is not checked out")
+@unittest.skipIf(not (CORPUS / "manifest.json").is_file(), "the manifest is not checked out")
 class CorpusContractTests(unittest.TestCase):
     """The committed corpus as it stands."""
 
+    @unittest.skipIf(not HAS_DOCUMENTS, "the corpus documents are not checked out")
     @unittest.skipIf(pdfplumber is None, "the rag extra is not installed")
     def test_committed_corpus_agrees_with_its_manifest(self) -> None:
         self.assertEqual(lint(CORPUS), [])
 
+    @unittest.skipIf(not HAS_DOCUMENTS, "the corpus documents are not checked out")
     def test_corpus_is_the_sixty_nine_documents_the_plan_names(self) -> None:
         records = load_manifest(CORPUS)["documents"]
         self.assertEqual(len(records), 69)
@@ -96,6 +103,7 @@ class CorpusContractTests(unittest.TestCase):
             },
         )
 
+    @unittest.skipIf(not HAS_DOCUMENTS, "the corpus documents are not checked out")
     @unittest.skipIf(not EVENTS.exists(), "deployment_events.csv is not checked in")
     def test_every_cited_deployment_resolves_to_a_historical_record(self) -> None:
         ids = set(pd.read_csv(EVENTS, usecols=["deployment_id"])["deployment_id"])

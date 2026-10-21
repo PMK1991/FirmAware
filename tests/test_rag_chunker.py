@@ -18,6 +18,11 @@ from firmaware.rag.chunker import (
 
 ROOT = Path(__file__).resolve().parents[1]
 CORPUS = ROOT / "data" / "corpus"
+# Only the manifest is committed while publishing the documents is undecided,
+# so "checked out" means the documents themselves, not the directory.
+HAS_DOCUMENTS = CORPUS.is_dir() and any(
+    p.suffix in {".md", ".pdf"} for p in CORPUS.iterdir()
+)
 
 try:  # PDFs parse through the optional "rag" extra
     import pdfplumber
@@ -225,7 +230,7 @@ class InvariantTests(unittest.TestCase):
 
 
 @unittest.skipIf(pdfplumber is None, "the rag extra is not installed")
-@unittest.skipIf(not CORPUS.exists(), "the corpus is not checked out")
+@unittest.skipIf(not HAS_DOCUMENTS, "the corpus documents are not checked out")
 class CorpusChunkingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
