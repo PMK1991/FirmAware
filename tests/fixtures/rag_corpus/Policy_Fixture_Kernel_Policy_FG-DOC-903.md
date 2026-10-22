@@ -5,6 +5,7 @@
 |---|---|
 | Document ID | FG-DOC-903 |
 | Evidence Strength | HIGH |
+| Site Criticality Scope | MEDIUM |
 
 ## Mandatory Rules
 1. A kernel_touched update needs an engineering review.

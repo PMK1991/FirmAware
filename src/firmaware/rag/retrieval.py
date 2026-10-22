@@ -10,7 +10,8 @@ notes and advisories. So each document type is reached by its own route:
     transition    Transition                          vendor + jump band, then vector
     cross_vendor  CrossVendor                         primary vendor, then vector
     runbook       Runbook                             vendor + device family (vectorless)
-    policy        Policy                              active-flag keywords (vectorless)
+    policy        Policy                              site criticality, then active-flag
+                                                      keywords (vectorless)
     matrix        Matrix                              vendor named in it (vectorless)
 
 A route that has no matching document returns nothing. Substituting a
@@ -192,9 +193,18 @@ def retrieve(
         for chunk in backend.chunks_of(doc_id)[: ROUTE_LIMITS["runbook"]]
     ]
 
+    # Exact match on the site criticality each policy declares, as its own text
+    # says ("covers all sites categorized under a MEDIUM criticality profile").
+    # A HIGH-only policy's rules otherwise reach MEDIUM sites on keywords alone;
+    # a site no policy covers gets none, not the nearest one.
+    policies = _docs(
+        records,
+        "Policy",
+        scope=lambda r: r["site_criticality_scope"] == row["site_criticality"],
+    )
     policy_chunks = [
         chunk
-        for doc_id in sorted(_docs(records, "Policy"))
+        for doc_id in sorted(policies)
         for chunk in backend.chunks_of(doc_id)
         if chunk["chunk_kind"] in {"rule", "whole"}
     ]

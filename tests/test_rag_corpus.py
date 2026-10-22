@@ -177,6 +177,16 @@ class CorpusLintTests(unittest.TestCase):
         write_manifest(self.corpus, manifest)
         self.assertTrue(any("missing" in p for p in self._lint()))
 
+    def test_policy_without_a_site_criticality_scope_fails(self) -> None:
+        # Unscoped, it would match no site and vanish from every explanation.
+        path = self.corpus / "Policy_Fixture_Kernel_Policy_FG-DOC-903.md"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("| Site Criticality Scope | MEDIUM |\n", ""),
+            encoding="utf-8",
+        )
+        write_manifest(self.corpus, build_manifest(self.corpus, "test fixture"))
+        self.assertTrue(any("no Site Criticality Scope" in p for p in self._lint()))
+
     def test_unknown_document_type_fails(self) -> None:
         manifest = load_manifest(self.corpus)
         manifest["documents"][1]["document_type"] = "Whitepaper"
