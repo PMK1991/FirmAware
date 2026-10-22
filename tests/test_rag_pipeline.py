@@ -63,10 +63,11 @@ class CountingGenerator:
         return Generation(self.text, "end_turn")
 
 
-def _record(doc_id, document_type, vendors=(), device_family=None, band=None, cites=()):
+def _record(doc_id, document_type, vendors=(), device_family=None, band=None, cites=(),
+            scope=None):
     return {"doc_id": doc_id, "document_type": document_type, "vendors": list(vendors),
             "device_family": device_family, "transition_class": band,
-            "source_deployment_ids": list(cites)}
+            "site_criticality_scope": scope, "source_deployment_ids": list(cites)}
 
 
 def _chunk(doc_id, document_type, index, text, vendors=(), kind="prose"):
@@ -83,8 +84,9 @@ RECORDS = [
     _record("FG-DOC-005", "Transition", ["Siemens"], band="major", cites=["DEP_000003"]),
     _record("FG-DOC-006", "CrossVendor", ["Siemens", "Cisco"]),
     _record("FG-DOC-007", "CrossVendor", ["Cisco", "Siemens"]),
-    _record("FG-DOC-008", "Policy"),
+    _record("FG-DOC-008", "Policy", scope="HIGH"),
     _record("FG-DOC-009", "Matrix"),
+    _record("FG-DOC-010", "Policy", scope="MEDIUM"),
 ]
 CHUNKS = [
     _chunk("FG-DOC-001", "Postmortem", 0, "Siemens PLC kernel rollback after a major version jump", ["Siemens"]),
@@ -102,6 +104,8 @@ CHUNKS = [
            kind="whole"),
     _chunk("FG-DOC-009", "Matrix", 0, "| Vendor | Risk |\n| Siemens | HIGH |\n| Honeywell | LOW |",
            kind="whole"),
+    _chunk("FG-DOC-010", "Policy", 0, "# Policy\n## Mandatory Rules\n1. kernel_touched needs a lab.\n\n"
+           "## Exception Process\nAsk.", kind="rule"),
 ]
 
 
@@ -162,6 +166,17 @@ class RetrievalTests(unittest.TestCase):
     def test_policy_rules_outrank_a_collapsed_whole_document(self) -> None:
         policy = self._retrieve(active_flags=["kernel_touched", "bootloader_touched"])["policy"]
         self.assertEqual(policy[0].chunk["chunk_kind"], "rule")
+
+    def test_a_policy_reaches_only_the_site_criticality_it_declares(self) -> None:
+        # Seen live: a HIGH-only policy's rule, matched on major_version_jump,
+        # was recommended for a MEDIUM site. Keyword overlap is not scope.
+        def policies(criticality):
+            routes = self._retrieve(site_criticality=criticality)
+            return {h.chunk["doc_id"] for h in routes["policy"]}
+
+        self.assertEqual(policies("HIGH"), {"FG-DOC-008"})
+        self.assertEqual(policies("MEDIUM"), {"FG-DOC-010"})
+        self.assertEqual(policies("LOW"), set())
 
     def test_query_carries_no_identifier(self) -> None:
         query = build_query(_row(), ["kernel_touched"])
