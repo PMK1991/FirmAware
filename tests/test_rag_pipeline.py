@@ -252,6 +252,13 @@ class ExplainTests(unittest.TestCase):
         checks = grounding_checks("About 98% risk [FG-DOC-001].", cited, context, [])
         self.assertTrue(checks["numbers_ok"], checks)
 
+    def test_the_major_version_and_the_magnitude_are_told_apart(self) -> None:
+        # The writer explained major_version_jump by the magnitude when it saw
+        # only the magnitude; the context now carries what sets the flag.
+        context = explain(_row(version_jump_magnitude=1.0), RECORDS, self.index, None).context
+        self.assertIn("Major version: 4 -> 5\n", context)
+        self.assertIn("Version jump magnitude: 1.0 (not the major_version_jump flag)", context)
+
     def test_a_failed_call_is_an_error_not_an_explanation(self) -> None:
         class Refusing:
             name = "refusing"

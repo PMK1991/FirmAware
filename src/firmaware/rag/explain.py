@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from ..features import _major
 from .gate import DEFAULT_GATE, Assessment, GateConfig, assess
 from .generate import SYSTEM_PROMPT, Generator, grounding_checks, user_message
 from .retrieval import Hit, SearchBackend, retrieve
@@ -60,13 +61,24 @@ def context_block(row: pd.Series, flags: list[str]) -> str:
         item = row.get(column)
         return "unknown" if item is None or (isinstance(item, float) and math.isnan(item)) else item
 
+    def major(column: str) -> object:
+        parsed = _major(row.get(column))
+        return "unknown" if parsed is None else parsed
+
     window = value("maintenance_window")
     lines = [
         f"Vendor: {row['vendor_name']}",
         f"Device type: {row['device_type']}",
         f"Fleet tier: {value('fleet_tier')}",
         f"Firmware: {row['current_firmware']} -> {row['target_firmware']}",
-        f"Version jump magnitude: {value('version_jump_magnitude')}",
+        # Both lines, and the label, because the writer conflated them: given
+        # only the magnitude beside an active major_version_jump, it explained
+        # the flag by the magnitude ("triggered because the magnitude is 1.0")
+        # and once read 4.0 -> 4.2 at magnitude 4.42 as a major jump. The
+        # corpus compares magnitudes with historical averages; the flag is
+        # only ever the major number going up.
+        f"Major version: {major('current_firmware')} -> {major('target_firmware')}",
+        f"Version jump magnitude: {value('version_jump_magnitude')} (not the major_version_jump flag)",
         f"Deployment type: {row['deployment_type']}",
         f"Maintenance window: {window if window == 'unknown' else ('yes' if window else 'no')}",
         f"Site criticality: {row['site_criticality']}",
