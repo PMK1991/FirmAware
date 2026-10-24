@@ -681,9 +681,22 @@ def render_evidence_section(selected_id: str, row: pd.Series, run_key: str) -> N
             f"{html.escape(result.generated_by)}</div>",
             unsafe_allow_html=True,
         )
-        with st.container(border=True):
-            st.markdown(result.text)
+        from firmaware.rag.generate import mark_unretrieved
+
         checks = result.checks
+        unretrieved = checks.get("unretrieved_citations", []) if checks else []
+        with st.container(border=True):
+            st.markdown(mark_unretrieved(result.text, unretrieved))
+        if unretrieved:
+            st.warning(
+                f"This explanation cites {', '.join(unretrieved)}, which "
+                f"{'was' if len(unretrieved) == 1 else 'were'} not retrieved for this "
+                "deployment. The sentences citing "
+                f"{'it are' if len(unretrieved) == 1 else 'them are'} not backed by "
+                "the evidence below."
+            )
+        elif checks and not checks["citations_ok"]:
+            st.warning("This explanation cites none of the evidence below.")
         if checks:
             st.caption(
                 f"Grounding checks: citations {'✓' if checks['citations_ok'] else '✗'} · "

@@ -28,6 +28,7 @@ from firmaware.rag.generate import (
     generator_from_env,
     grounding_checks,
     judge_faithfulness,
+    mark_unretrieved,
 )
 from firmaware.rag.retrieval import Hit, LocalIndex, build_query, retrieve
 from tests.test_schema import make_training_frame
@@ -443,6 +444,21 @@ class CitationRuleTests(unittest.TestCase):
         stray = grounding_checks("See [FG-DOC-047].", GROUNDING_HITS, "", [],
                                  require_citation=False)
         self.assertFalse(stray["citations_ok"])
+
+
+class MarkUnretrievedTests(unittest.TestCase):
+    def test_only_unretrieved_citations_are_struck(self) -> None:
+        text = "Timeouts recur [FG-DOC-002, FG-DOC-005] and [FG-DOC-005 not provided]."
+        marked = mark_unretrieved(text, ["FG-DOC-005"])
+        self.assertEqual(
+            marked,
+            "Timeouts recur [FG-DOC-002, ~~FG-DOC-005~~ *(not retrieved)*] and "
+            "[~~FG-DOC-005~~ *(not retrieved)* not provided].",
+        )
+
+    def test_a_fully_grounded_text_is_unchanged(self) -> None:
+        text = "Kernel rollbacks [FG-DOC-001]."
+        self.assertEqual(mark_unretrieved(text, []), text)
 
 
 class GroundingCheckTests(unittest.TestCase):
