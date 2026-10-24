@@ -28,6 +28,7 @@ from firmaware.rag.generate import (
     generator_from_env,
     grounding_checks,
     judge_faithfulness,
+    mark_unretrieved,
 )
 from firmaware.rag.retrieval import Hit, LocalIndex, build_query, retrieve
 from tests.test_schema import make_training_frame
@@ -252,6 +253,13 @@ class ExplainTests(unittest.TestCase):
         checks = grounding_checks("About 98% risk [FG-DOC-001].", cited, context, [])
         self.assertTrue(checks["numbers_ok"], checks)
 
+    def test_the_major_version_and_the_magnitude_are_told_apart(self) -> None:
+        # The writer explained major_version_jump by the magnitude when it saw
+        # only the magnitude; the context now carries what sets the flag.
+        context = explain(_row(version_jump_magnitude=1.0), RECORDS, self.index, None).context
+        self.assertIn("Major version: 4 -> 5\n", context)
+        self.assertIn("Version jump magnitude: 1.0 (not the major_version_jump flag)", context)
+
     def test_a_failed_call_is_an_error_not_an_explanation(self) -> None:
         class Refusing:
             name = "refusing"
@@ -436,6 +444,21 @@ class CitationRuleTests(unittest.TestCase):
         stray = grounding_checks("See [FG-DOC-047].", GROUNDING_HITS, "", [],
                                  require_citation=False)
         self.assertFalse(stray["citations_ok"])
+
+
+class MarkUnretrievedTests(unittest.TestCase):
+    def test_only_unretrieved_citations_are_struck(self) -> None:
+        text = "Timeouts recur [FG-DOC-002, FG-DOC-005] and [FG-DOC-005 not provided]."
+        marked = mark_unretrieved(text, ["FG-DOC-005"])
+        self.assertEqual(
+            marked,
+            "Timeouts recur [FG-DOC-002, ~~FG-DOC-005~~ *(not retrieved)*] and "
+            "[~~FG-DOC-005~~ *(not retrieved)* not provided].",
+        )
+
+    def test_a_fully_grounded_text_is_unchanged(self) -> None:
+        text = "Kernel rollbacks [FG-DOC-001]."
+        self.assertEqual(mark_unretrieved(text, []), text)
 
 
 class GroundingCheckTests(unittest.TestCase):

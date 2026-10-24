@@ -289,6 +289,22 @@ def _number_tokens(text: str) -> set[str]:
     return set(NUMBER.findall(references.replace(",", "")))
 
 
+def mark_unretrieved(text: str, unretrieved: list[str]) -> str:
+    """Strike through citations to documents this deployment never retrieved.
+
+    Every run so far, the unchanged baseline included, has had explanations
+    citing a document id that was not among the evidence, sometimes annotated
+    "[FG-DOC-004 not provided, but implied]". The claim beside it reads as
+    sourced when it is not. Marking it keeps the rest of the explanation, which
+    is usually sound; withholding all of it for one bad id would not.
+    """
+    bad = set(unretrieved)
+    return CITATION.sub(
+        lambda m: f"~~{m.group(0)}~~ *(not retrieved)*" if m.group(0) in bad else m.group(0),
+        text,
+    )
+
+
 def grounding_checks(
     text: str, hits: list[Hit], context: str, active_flags: list[str],
     require_citation: bool = True,
