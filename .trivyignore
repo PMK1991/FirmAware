@@ -50,6 +50,12 @@ CVE-2025-15036
 CVE-2025-15031
 CVE-2026-2033
 CVE-2026-2614
+# Same path, added 2026-10-24: a crafted trace id POSTed to the server's
+# /api/3.0/mlflow/traces writes outside the experiment directory, and only
+# with the FileStore backend. No server runs here, and the tracking store is
+# sqlite locally or the AML-hosted server, never FileStore. Fixed past 3.17.1,
+# beyond the MLflow 2 pin.
+CVE-2026-53995
 
 # --- mlflow 2.22.5: command / code execution in the server and model serving -
 # Reached through `mlflow models serve` and the recipe/deployment entrypoints.
