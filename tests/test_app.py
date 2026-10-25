@@ -409,6 +409,69 @@ class AppTests(unittest.TestCase):
             self.assertEqual(page.exception, [])
             self.assertEqual(len(page.dataframe[0].value), 12)
 
+    def write_runs_with_smoke(self, root: Path, real: bool) -> tuple[dict, Path]:
+        """Every deploy publishes a smoke run through the real batch path, so in
+        practice the newest objects are smoke runs, with real runs behind them."""
+        environment = build_fixture(root)
+        runs = root / "scores"
+        runs.mkdir()
+        full = pd.read_csv(environment["FIRMAWARE_SCORES_URI"])
+        if real:
+            full.to_csv(runs / "scores_20260730T000000000001Z_real.csv", index=False)
+        smoke = full.head(5).assign(
+            deployment_id=[f"smoke-00{n}" for n in range(1, 6)]
+        )
+        for stamp in ("20260731", "20260801"):
+            smoke.to_csv(
+                runs / f"scores_{stamp}T000000000001Z_smoke.csv", index=False
+            )
+        environment["FIRMAWARE_SCORES_URI"] = str(runs)
+        return environment, runs
+
+    def test_page_opens_on_the_newest_run_that_is_not_a_smoke_test(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            environment, runs = self.write_runs_with_smoke(Path(directory), real=True)
+
+            page = self.start(environment)
+            page.radio[0].set_value("Fleet Overview").run()
+            self.assertEqual(page.exception, [])
+            self.assertEqual(len(page.dataframe[0].value), 12)
+
+            # Smoke runs stay selectable; they are skipped only as the default.
+            selector = self.picker(page, "Scoring run")
+            self.assertEqual(len(selector.options), 3)
+            selector.set_value(
+                str(runs / "scores_20260801T000000000001Z_smoke.csv")
+            ).run()
+            self.assertEqual(page.exception, [])
+            self.assertEqual(len(page.dataframe[0].value), 5)
+
+    def test_only_smoke_runs_still_open_on_the_newest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            environment, runs = self.write_runs_with_smoke(Path(directory), real=False)
+
+            page = self.start(environment)
+            page.radio[0].set_value("Fleet Overview").run()
+            self.assertEqual(page.exception, [])
+            self.assertEqual(len(page.dataframe[0].value), 5)
+            self.assertEqual(
+                self.picker(page, "Scoring run").value,
+                str(runs / "scores_20260801T000000000001Z_smoke.csv"),
+            )
+
+    def test_the_smoke_fixture_ids_are_what_the_page_skips(self) -> None:
+        """The page recognises smoke runs by id prefix; renaming the fixture's
+        rows would silently put smoke data back on the default view."""
+        fixture = pd.read_csv(
+            ROOT / "deploy" / "azure" / "fixtures" / "upcoming_smoke.csv"
+        )
+        prefix = re.search(
+            r'^SMOKE_ID_PREFIX = "([^"]+)"$',
+            APP.read_text(encoding="utf-8"),
+            re.MULTILINE,
+        ).group(1)
+        self.assertTrue(fixture["deployment_id"].str.startswith(prefix).all())
+
     def test_risk_flag_panel_matches_the_underlying_deployment_data(self) -> None:
         """A panel with every switch off must mean no flags, not a failed render."""
         with tempfile.TemporaryDirectory() as directory:

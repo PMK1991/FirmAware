@@ -41,6 +41,8 @@ from firmaware.io import (
 from firmaware.schema import validate
 
 DEMO_DIR = Path(__file__).resolve().parent / "demo"
+# deploy/azure/fixtures/upcoming_smoke.csv names every row this way.
+SMOKE_ID_PREFIX = "smoke-"
 
 
 def resolve_uri(env_var: str, default: str, demo: str, probe: str | None = None) -> str:
@@ -748,13 +750,38 @@ if not score_runs:
         f"No scores found at {SCORES_URI}. Run `python -m firmaware predict` first."
     )
 
-selected_run = score_runs[-1]
+def is_smoke_run(score_uri: str) -> bool:
+    """A run that scored only the deploy smoke fixture.
+
+    Every deploy publishes one through the real batch path, so without this the
+    page would open on five fixture rows after each release. Object names carry
+    only the scoring job id, so the rows are the only reliable tell.
+    """
+    try:
+        ids = load_scores(score_uri)["deployment_id"].astype(str)
+    except Exception:  # noqa: BLE001 - an unreadable run is reported once selected
+        return False
+    return not ids.empty and bool(ids.str.startswith(SMOKE_ID_PREFIX).all())
+
+
+newest_first = list(reversed(score_runs))
+default_run = next(
+    (uri for uri in newest_first if not is_smoke_run(uri)), newest_first[0]
+)
+selected_run = default_run
 if len(score_runs) > 1:
     selected_run = st.sidebar.selectbox(
         "Scoring run",
-        options=list(reversed(score_runs)),
+        options=newest_first,
+        index=newest_first.index(default_run),
         format_func=lambda uri: uri.rsplit("/", 1)[-1],
     )
+    skipped = newest_first.index(default_run)
+    if skipped:
+        st.sidebar.caption(
+            f"Opened on the newest real run; {skipped} newer smoke-test "
+            f"run{'s' if skipped > 1 else ''} above it in the list."
+        )
 
 try:
     scores = load_scores(selected_run)
