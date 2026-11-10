@@ -27,7 +27,12 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV MLFLOW_TRACKING_URI=sqlite:////tmp/firmaware-mlflow.db
 ENV FIRMAWARE_MLFLOW_ARTIFACT_ROOT=/tmp/firmaware-mlruns
 
+# The upgrade is for the base image lagging Debian's security archive: on
+# 2026-11-10 python:3.11-slim still shipped zlib1g 1.3.1-1+b1 while the fix for
+# CVE-2026-76844 and CVE-2026-85091 was already published as +deb13u1, and the
+# Trivy gate failed on a fix that only needed installing.
 RUN apt-get update \
+    && apt-get upgrade --no-install-recommends --yes \
     && apt-get install --no-install-recommends --yes libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 firmaware \
