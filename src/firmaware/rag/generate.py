@@ -46,6 +46,20 @@ THIS_DEPLOYMENT = re.compile(
     r"|\bthe one planned\b|\bthis one\b",
     re.IGNORECASE,
 )
+# The model's score is the one fact no document can source: the corpus is
+# history, and only its index page (FG-DOC-000) mentions the model at all. The
+# writer still cited advisories for it ("probability of 0.7567 (approximately
+# 76%) [FG-DOC-020]"), which the citation check passes because the id was
+# retrieved.
+MODEL_SCORE = re.compile(
+    r"\bmodel(?:'s)?\b.{0,40}?\b(score|scored|probabilit|assign|predict)"
+    r"|\bNO[_ ]GO\b",
+    re.IGNORECASE,
+)
+# The context gives only the maximum CVSS, and the writer has restated it as an
+# average ("the average CVSS score for this deployment is 6.4"). The number
+# check passes it: 6.4 is in the context, under another label.
+AGGREGATE_CVSS = r"\b(average|mean|median|typical)\b[^.\d]{0,30}?\bCVSS\b[^\d]{0,40}?"
 
 
 @dataclass(frozen=True)
@@ -305,6 +319,24 @@ def mark_unretrieved(text: str, unretrieved: list[str]) -> str:
     )
 
 
+def mark_misattributed(text: str, checks: dict) -> str:
+    """Mark the sentences `grounding_checks` found misattributing a fact.
+
+    Display only, like `mark_unretrieved`. Across runs 5-7, 19 of 48
+    explanations cited a document for the model's own score despite the
+    prompt's rule against it, so this does not wait on a prompt fix: the id is
+    struck, and a max CVSS restated as an average is annotated.
+    """
+    for sentence in checks.get("model_score_cited", []):
+        struck = CITATION.sub(lambda m: f"~~{m.group(0)}~~", sentence)
+        text = text.replace(sentence, f"{struck} *(the model's score comes from no document)*", 1)
+    for sentence in checks.get("mislabelled_max_cvss", []):
+        text = text.replace(
+            sentence, f"{sentence} *(this deployment's CVSS figure is its maximum, not an average)*", 1
+        )
+    return text
+
+
 def grounding_checks(
     text: str, hits: list[Hit], context: str, active_flags: list[str],
     require_citation: bool = True,
@@ -330,7 +362,28 @@ def grounding_checks(
             if flag in sentence and flag not in active_flags
         }
     )
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    probability = re.search(r"probability (\d\.\d+), about (\d+)%", context)
+    score_tokens = list(probability.groups()) if probability else []
+    cited_score = [
+        sentence for sentence in sentences
+        if CITATION.search(sentence)
+        and (MODEL_SCORE.search(sentence)
+             or any(re.search(rf"(?<![\d.]){re.escape(t)}(?![\d])", sentence)
+                    for t in score_tokens[:1]))
+    ]
+    max_cvss = re.search(r"^Max CVSS: ([\d.]+)", context, re.MULTILINE)
+    mislabelled = [
+        sentence for sentence in sentences
+        if max_cvss
+        and re.search(AGGREGATE_CVSS + rf"(?<![\d.]){re.escape(max_cvss.group(1))}(?![\d])",
+                      sentence, re.IGNORECASE)
+    ]
     return {
+        # Reported, not gated: how often these happen is still being measured,
+        # and the bar for them is a separate decision.
+        "model_score_cited": cited_score,
+        "mislabelled_max_cvss": mislabelled,
         # A no-flag explanation may rightly cite nothing ("the evidence does not
         # apply"); any citation it does make must still be to retrieved evidence.
         "citations_ok": (bool(cited) or not require_citation) and cited <= retrieved,
