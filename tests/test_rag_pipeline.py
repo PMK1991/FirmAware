@@ -28,6 +28,7 @@ from firmaware.rag.generate import (
     generator_from_env,
     grounding_checks,
     judge_faithfulness,
+    mark_misattributed,
     mark_unretrieved,
 )
 from firmaware.rag.retrieval import Hit, LocalIndex, build_query, retrieve
@@ -259,6 +260,7 @@ class ExplainTests(unittest.TestCase):
         context = explain(_row(version_jump_magnitude=1.0), RECORDS, self.index, None).context
         self.assertIn("Major version: 4 -> 5\n", context)
         self.assertIn("Version jump magnitude: 1.0 (not the major_version_jump flag)", context)
+        self.assertIn("(the highest among its CVEs, not an average)", context)
 
     def test_a_failed_call_is_an_error_not_an_explanation(self) -> None:
         class Refusing:
@@ -463,6 +465,45 @@ class MarkUnretrievedTests(unittest.TestCase):
 
 class GroundingCheckTests(unittest.TestCase):
     """Each check fires on the defect it names before its silence means anything."""
+
+    # UPC_00023 as Llama wrote it on 2026-10-24: every existing check passed it.
+    MISATTRIBUTED = (
+        "The deployment has been assigned a HIGH/NO_GO model score with a probability "
+        "of 0.7567 (approximately 76%) [FG-DOC-020]. While the average CVSS score for "
+        "this deployment is 6.4, which is higher than the 4.46 in [FG-DOC-020], caution holds."
+    )
+    SCORE_CONTEXT = (
+        "Max CVSS: 6.4 (the highest among its CVEs, not an average)\n"
+        "Model score: HIGH / NO_GO (probability 0.7567, about 76%)"
+    )
+
+    def test_a_document_cited_for_the_model_score_is_caught(self) -> None:
+        checks = grounding_checks(self.MISATTRIBUTED, GROUNDING_HITS, self.SCORE_CONTEXT, [])
+        self.assertEqual(len(checks["model_score_cited"]), 1)
+        self.assertIn("0.7567", checks["model_score_cited"][0])
+
+    def test_max_cvss_restated_as_an_average_is_caught(self) -> None:
+        checks = grounding_checks(self.MISATTRIBUTED, GROUNDING_HITS, self.SCORE_CONTEXT, [])
+        self.assertEqual(len(checks["mislabelled_max_cvss"]), 1)
+        self.assertIn("average CVSS score for this deployment is 6.4",
+                      checks["mislabelled_max_cvss"][0])
+
+    def test_correct_comparisons_and_uncited_scores_pass(self) -> None:
+        """The prompt asks for comparisons with historical figures, which rightly
+        carry a document id; only the model's score and the label are at issue."""
+        text = ("The model assigned HIGH / NO_GO, about 76%. Its max CVSS of 6.4 exceeds "
+                "the 4.46 average CVSS of past failures [FG-DOC-020].")
+        checks = grounding_checks(text, GROUNDING_HITS, self.SCORE_CONTEXT, [])
+        self.assertEqual(checks["model_score_cited"], [])
+        self.assertEqual(checks["mislabelled_max_cvss"], [])
+
+    def test_misattributed_sentences_are_marked_not_removed(self) -> None:
+        checks = grounding_checks(self.MISATTRIBUTED, GROUNDING_HITS, self.SCORE_CONTEXT, [])
+        marked = mark_misattributed(self.MISATTRIBUTED, checks)
+        self.assertIn("(approximately 76%) [~~FG-DOC-020~~]. *(the model's score comes from no "
+                      "document)*", marked)
+        self.assertIn("*(this deployment's CVSS figure is its maximum, not an average)*", marked)
+        self.assertIn("the 4.46 in [FG-DOC-020]", marked)  # the sound citation is kept
 
     def test_clean_text_passes(self) -> None:
         text = "Kernel changes drove 400 rollbacks [FG-DOC-001]. kernel_touched is active at CVSS 7.9."

@@ -82,7 +82,10 @@ def context_block(row: pd.Series, flags: list[str]) -> str:
         f"Deployment type: {row['deployment_type']}",
         f"Maintenance window: {window if window == 'unknown' else ('yes' if window else 'no')}",
         f"Site criticality: {row['site_criticality']}",
-        f"Max CVSS: {row['max_cvss_score']}",
+        # Labelled for the same reason as the magnitude: the writer restated
+        # the bare "Max CVSS" as "the average CVSS score for this deployment",
+        # because the evidence it was comparing with reports averages.
+        f"Max CVSS: {row['max_cvss_score']} (the highest among its CVEs, not an average)",
         f"Past failures on this device: {value('past_failure_count')}",
     ]
     probability = row.get("risk_probability")

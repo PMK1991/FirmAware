@@ -287,7 +287,8 @@ def evaluate_generation(
         if result.generated_by:
             entry.update({k: result.checks[k] for k in
                           ("citations_ok", "numbers_ok", "flags_ok", "unretrieved_citations",
-                           "stray_numbers", "borrowed_flags")})
+                           "stray_numbers", "borrowed_flags", "model_score_cited",
+                           "mislabelled_max_cvss")})
             if judge is not None:
                 entry["judge"] = judge_faithfulness(judge, result.context, result.evidence,
                                                     result.text or "")
@@ -299,6 +300,9 @@ def evaluate_generation(
         "numbers_ok": _rate([r["numbers_ok"] for r in generated]),
         "flags_ok": _rate([r["flags_ok"] for r in generated]),
         "refusal_correct": _rate([r["refusal_correct"] for r in rows]),
+        # Counts of explanations, not gated: the bar for these is not yet set.
+        "model_score_cited": sum(bool(r["model_score_cited"]) for r in generated),
+        "mislabelled_max_cvss": sum(bool(r["mislabelled_max_cvss"]) for r in generated),
         **_judge_rates([r.get("judge") for r in generated]),
     }
     gates = {
